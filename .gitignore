@@ -1,0 +1,30 @@
+# Compilated and binaries
+/bin/
+/build/
+*.o
+*.obj
+*.exe
+*.out
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Extras
+*~
+*.swp
+*.swo
+.DS_Store
+*.log
+.vscode/
+.idea/
+*.user
+*.code-workspace
+*.dump
+*.trace
+*.core
+*.bak
+*.tmp
