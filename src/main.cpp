@@ -36,7 +36,7 @@ using namespace std;
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 const int MAX_FRAMES_IN_FLIGHT = 2;
-const string SPV_DIR = "../shaders/";
+const string SPV_DIR = "shaders/";
 
 const vector<const char *> validationLayers = {
     "VK_LAYER_KHRONOS_validation"};
@@ -51,48 +51,6 @@ const bool enableValidationLayers = true;
 const bool enableValidationLayers = false;
 #endif
 
-struct Vertex
-{
-    glm::vec2 pos;
-    glm::vec3 color;
-
-    static VkVertexInputBindingDescription getBindingDescription()
-    {
-        VkVertexInputBindingDescription bindingDescription{};
-
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Vertex);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        return bindingDescription;
-    }
-
-    static array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
-    {
-        array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
-
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-        return attributeDescriptions;
-    }
-};
-
-const vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
-
-const vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0};
 
 // TODO Replace with something NOT dummy
 struct dummy{
@@ -160,7 +118,7 @@ static vector<char> readFile(const string &filename)
 
     if (!file.is_open())
     {
-        throw runtime_error("failed to open file");
+        throw runtime_error("failed to open file: "+filename);
     }
 
     size_t fileSize = (size_t)file.tellg();
@@ -217,10 +175,12 @@ private:
     
 
     // Modificar
-    VkDescriptorSetLayout descriptorSetLayout;    
+    VkDescriptorSetLayout descriptorSetLayoutPerFrame;    
+    VkDescriptorSetLayout descriptorSetLayoutGlobal;    
     VkPipelineLayout pipelineLayout;              
     VkDescriptorPool descriptorPool;              
-    vector<VkDescriptorSet> descriptorSets;
+    vector<VkDescriptorSet> descriptorSetsPerFrame;
+    VkDescriptorSet descriptorSetGlobal;
       
 
     // Añadir
@@ -251,7 +211,7 @@ private:
 
     static void framebufferResizeCallback(GLFWwindow *window, int width, int height)
     {
-        auto app = reinterpret_cast<HelloTriangleApplication *>(glfwGetWindowUserPointer(window));
+        auto app = reinterpret_cast<RaytracingApp *>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
     }
 
@@ -268,8 +228,11 @@ private:
         createSwapChain();
         createImageViews();
         createDescriptorSetLayout();
+        createComputePipeline();
         createCommandPool();
         createUniformBuffers();
+        createImageBuffer();
+        createShaderStorageBuffer();
         createShaderStorageBuffer();
         createDescriptorPool();
         createDescriptorSets();
@@ -650,14 +613,17 @@ private:
         // Prefer a specific format and color space for sRGB color output.
         for (const auto &availableFormat : availableFormats)
         {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM &&
-                availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM )
             {
+                swapChainImageFormat = availableFormat.format;
                 return availableFormat;
             }
         }
 
+        throw runtime_error("failed to find correct format");
+
         // Fallback to the first available format if preferred one isn't found.
+        swapChainImageFormat = availableFormats[0].format;
         return availableFormats[0];
     }
 
@@ -708,7 +674,7 @@ private:
     {
         // Query support details for swap chains from the current physical device.
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
-
+        
         // Choose the optimal settings from the supported ones.
         VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
@@ -733,7 +699,7 @@ private:
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
         createInfo.imageExtent = extent;
         createInfo.imageArrayLayers = 1;                             // Always 1 unless using stereoscopic 3D.
-        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // Used for rendering to screen.
+        createInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
         uint32_t queueFamilyIndices[] = {indices.graphicsAndComputeFamily.value(), indices.presentFamily.value()};
@@ -833,95 +799,15 @@ private:
         computeShaderStageInfo.module = computeShaderModule;
         computeShaderStageInfo.pName = "main"; // Entry point function
 
-        // Combine shader stages into an array
-        VkPipelineShaderStageCreateInfo shaderStages[] = {computeShaderStageInfo};
-
-        // ======================
-        // FIXED-FUNCTION STAGES
-        // ======================
-
-        // Vertex input stage
-        auto bindingDescription = Vertex::getBindingDescription();
-        auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-        // Define primitive type (triangles) and disable primitive restart
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        // Configure rasterizer: fill polygons, cull back-facing triangles
-        VkPipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizer.depthClampEnable = VK_FALSE;
-        rasterizer.rasterizerDiscardEnable = VK_FALSE;
-        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizer.depthBiasEnable = VK_FALSE;
-
-        // Multisampling disabled (set to 1 sample per pixel)
-        VkPipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-        // Configure color blending (alpha blending enabled)
-        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-        colorBlendAttachment.colorWriteMask =
-            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        colorBlendAttachment.blendEnable = VK_TRUE;
-        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-
-        VkPipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.attachmentCount = 1;
-        colorBlending.pAttachments = &colorBlendAttachment;
-
-        // ======================
-        // DYNAMIC STATE SETUP
-        // ======================
-
-        // Enable dynamic viewport and scissor
-        vector<VkDynamicState> dynamicStates = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR};
-
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-        dynamicState.pDynamicStates = dynamicStates.data();
-
-        // Required even for dynamic state to define count
-        VkPipelineViewportStateCreateInfo viewportState{};
-        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportState.viewportCount = 1;
-        viewportState.scissorCount = 1;
-
         // ======================
         // PIPELINE LAYOUT
         // ======================
 
-        // No descriptor sets or push constants
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        pipelineLayoutInfo.setLayoutCount = 2;
+        array<VkDescriptorSetLayout,2> descriptorSetLayouts = {descriptorSetLayoutPerFrame,descriptorSetLayoutGlobal};
+        pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
 
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
         {
@@ -929,28 +815,18 @@ private:
         }
 
         // ======================
-        // GRAPHICS PIPELINE CREATION
+        // PIPELINE CREATION
         // ======================
 
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = shaderStages;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = nullptr; // No depth/stencil buffer
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = &dynamicState;
+        VkComputePipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
+        pipelineInfo.stage = computeShaderStageInfo;
 
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS)
-        {
-            throw runtime_error("failed to create graphics pipeline");
+        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, 
+            &pipelineInfo, nullptr, &computePipeline) != VK_SUCCESS) {
+
+            throw runtime_error("failed to create compute pipeline!");
         }
 
         // Clean up temporary shader modules
@@ -989,10 +865,20 @@ private:
         }
     }
 
-
-
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
     {
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkBufferCopy copyRegion{};
+        copyRegion.srcOffset = 0; // Optional
+        copyRegion.dstOffset = 0; // Optional
+        copyRegion.size = size;
+        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+        
+        endSingleTimeCommands(commandBuffer);
+    }
+
+    VkCommandBuffer beginSingleTimeCommands() {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -1007,11 +893,10 @@ private:
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
-        VkBufferCopy copyRegion{};
-        copyRegion.srcOffset = 0; // Optional
-        copyRegion.dstOffset = 0; // Optional
-        copyRegion.size = size;
-        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+        return commandBuffer;
+    }
+
+    void endSingleTimeCommands(VkCommandBuffer commandBuffer) {
         vkEndCommandBuffer(commandBuffer);
 
         VkSubmitInfo submitInfo{};
@@ -1019,8 +904,8 @@ private:
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(graphicsQueue);
+        vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(graphicsAndComputeQueue);
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
@@ -1059,6 +944,29 @@ private:
         }
     }
 
+    VkImageMemoryBarrier createMemoryBarrier(
+        VkImage image,
+        VkAccessFlags srcAccessMask,
+        VkAccessFlags dstAccessMask,
+        VkImageLayout oldLayout,
+        VkImageLayout newLayout
+    ){
+        VkImageMemoryBarrier barrier;
+
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.srcAccessMask = srcAccessMask;
+        barrier.dstAccessMask = dstAccessMask;
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+        return barrier;
+
+    }
+
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     {
         VkCommandBufferBeginInfo beginInfo{};
@@ -1071,45 +979,69 @@ private:
             throw runtime_error("failed to begin recording command buffer");
         }
 
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = swapChainExtent;
-        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            array<VkDescriptorSet,2> descriptorSets= {descriptorSetsPerFrame[currentFrame],descriptorSetGlobal};
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptorSets.data(), 0, 0);
 
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+            vkCmdDispatch(commandBuffer, (WIDTH + 15) / 16, (HEIGHT + 15) / 16, 1);
 
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapChainExtent.width);
-        viewport.height = static_cast<float>(swapChainExtent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            VkImageMemoryBarrier startBarriers[2]{};
+            startBarriers[0] = createMemoryBarrier(outputImage,
+                                VK_ACCESS_SHADER_WRITE_BIT,
+                                VK_ACCESS_TRANSFER_READ_BIT,
+                                VK_IMAGE_LAYOUT_GENERAL,
+                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            startBarriers[1] = createMemoryBarrier(swapChainImages[imageIndex],
+                                0,
+                                VK_ACCESS_TRANSFER_WRITE_BIT,
+                                VK_IMAGE_LAYOUT_UNDEFINED,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = swapChainExtent;
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            // Ejecutar barreras
+            vkCmdPipelineBarrier(commandBuffer,
+                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0,
+                                0, nullptr,
+                                0, nullptr,
+                                2, startBarriers);
 
-        VkBuffer vertexBuffers[] = {vertexBuffer};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+            // 3. Copiar imagen
+            VkImageCopy copyRegion{};
+            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.srcSubresource.mipLevel = 0;
+            copyRegion.srcSubresource.baseArrayLayer = 0;
+            copyRegion.srcSubresource.layerCount = 1;
+            copyRegion.srcOffset = {0, 0, 0};
+            copyRegion.dstSubresource = copyRegion.srcSubresource;
+            copyRegion.dstOffset = {0, 0, 0};
+            copyRegion.extent = {WIDTH, HEIGHT, 1};
 
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+            vkCmdCopyImage(commandBuffer,
+                        outputImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        swapChainImages[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        1, &copyRegion);
 
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+            VkImageMemoryBarrier endBarriers[2]{};
+            endBarriers[0] = createMemoryBarrier(outputImage,
+                            VK_ACCESS_TRANSFER_READ_BIT,
+                            VK_ACCESS_SHADER_WRITE_BIT,
+                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                            VK_IMAGE_LAYOUT_GENERAL);
+            endBarriers[1] = createMemoryBarrier(swapChainImages[imageIndex],
+                            VK_ACCESS_TRANSFER_WRITE_BIT,
+                            0,
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
-        vkCmdEndRenderPass(commandBuffer);
+            vkCmdPipelineBarrier(commandBuffer,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, 
+                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    0,
+                    0, nullptr,
+                    0, nullptr,
+                    2, endBarriers);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
@@ -1120,6 +1052,8 @@ private:
     void drawFrame()
     {
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+        vkQueueWaitIdle(presentQueue);
 
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
@@ -1133,6 +1067,8 @@ private:
         {
             throw std::runtime_error("failed to acquire swap chain image!");
         }
+
+        updateUniformBuffer(currentFrame);
 
         vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
@@ -1155,7 +1091,7 @@ private:
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS)
+        if (vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to submit draw command buffer!");
         }
@@ -1210,6 +1146,7 @@ private:
                 throw runtime_error("failed to create synchronization objects for a frame");
             }
         }
+
     }
 
     void recreateSwapChain()
@@ -1263,35 +1200,48 @@ private:
 
     void createDescriptorSetLayout()
     {
-        array<VkDescriptorSetLayoutBinding, 3> layoutBindings{};
+        VkDescriptorSetLayoutBinding layoutBindingA{};
 
-        layoutBindings[0].binding = 0;
-        layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        layoutBindings[0].descriptorCount = 1;
-        layoutBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        layoutBindings[0].pImmutableSamplers = nullptr;
+        layoutBindingA.binding = 0;
+        layoutBindingA.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        layoutBindingA.descriptorCount = 1;
+        layoutBindingA.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        layoutBindingA.pImmutableSamplers = nullptr;
 
-        layoutBindings[1].binding = 0;
-        layoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        layoutBindings[1].descriptorCount = 1;
-        layoutBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        layoutBindings[1].pImmutableSamplers = nullptr;
+        VkDescriptorSetLayoutCreateInfo layoutInfoPerFrame{};
+        layoutInfoPerFrame.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfoPerFrame.bindingCount = 1;
+        layoutInfoPerFrame.pBindings = &layoutBindingA;
 
-        layoutBindings[2].binding = 0;
-        layoutBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        layoutBindings[2].descriptorCount = 1;
-        layoutBindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        layoutBindings[2].pImmutableSamplers = nullptr;
-
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = 3;
-        layoutInfo.pBindings = layoutBindings.data();
-
-        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
+        if (vkCreateDescriptorSetLayout(device, &layoutInfoPerFrame, nullptr, &descriptorSetLayoutPerFrame) != VK_SUCCESS)
         {
-            throw runtime_error("failed to create descriptor set layout");
+            throw runtime_error("failed to create descriptor set layout per frame");
         }
+
+        array<VkDescriptorSetLayoutBinding, 2> layoutBindingsB{};
+
+        layoutBindingsB[0].binding = 0;
+        layoutBindingsB[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        layoutBindingsB[0].descriptorCount = 1;
+        layoutBindingsB[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        layoutBindingsB[0].pImmutableSamplers = nullptr;
+
+        layoutBindingsB[1].binding = 1;
+        layoutBindingsB[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        layoutBindingsB[1].descriptorCount = 1;
+        layoutBindingsB[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        layoutBindingsB[1].pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfoGlobal{};
+        layoutInfoGlobal.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfoGlobal.bindingCount = 2;
+        layoutInfoGlobal.pBindings = layoutBindingsB.data();
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfoGlobal, nullptr, &descriptorSetLayoutGlobal) != VK_SUCCESS)
+        {
+            throw runtime_error("failed to create descriptor set layout global");
+        }
+        
     }
     
     void createUniformBuffers()
@@ -1367,11 +1317,29 @@ private:
     }
 
 
+
     void createImageBuffer(){
         
-        createImage(WIDTH,HEIGHT,swapChainImageFormat,VK_IMAGE_TILING_OPTIMAL,
+        createImage(WIDTH,HEIGHT,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_TILING_OPTIMAL,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT ,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             outputImage,outputImageMemory);
+
+        VkCommandBuffer cmd = beginSingleTimeCommands();
+            VkImageMemoryBarrier barrier = createMemoryBarrier(outputImage,
+                                            0,
+                                            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
+                                            VK_IMAGE_LAYOUT_UNDEFINED,
+                                            VK_IMAGE_LAYOUT_GENERAL);
+            vkCmdPipelineBarrier(
+                cmd,
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &barrier
+            );
+        endSingleTimeCommands(cmd);
 
         VkImageViewCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1379,7 +1347,8 @@ private:
 
         // 2D images with one mip level and one array layer.
         createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format = swapChainImageFormat;
+        createInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        // TODO FIX
 
         // Default mapping of color channels.
         createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -1453,17 +1422,17 @@ private:
 
     void createDescriptorSets()
     {
-        vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        allocInfo.pSetLayouts = layouts.data();
+        vector<VkDescriptorSetLayout> layoutsPerFrame(MAX_FRAMES_IN_FLIGHT, descriptorSetLayoutPerFrame);
+        VkDescriptorSetAllocateInfo allocInfoPerFrame{};
+        allocInfoPerFrame.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfoPerFrame.descriptorPool = descriptorPool;
+        allocInfoPerFrame.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        allocInfoPerFrame.pSetLayouts = layoutsPerFrame.data();
 
-        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS)
+        descriptorSetsPerFrame.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(device, &allocInfoPerFrame, descriptorSetsPerFrame.data()) != VK_SUCCESS)
         {
-            throw runtime_error("failed to allocate descriptor sets");
+            throw runtime_error("failed to allocate descriptor sets per frame");
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -1473,50 +1442,61 @@ private:
             uniformBufferInfo.offset = 0;
             uniformBufferInfo.range = sizeof(UniformBufferObject);
 
-            VkDescriptorImageInfo imageInfo{};
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            imageInfo.imageView = outputImageView;
-            imageInfo.sampler = VK_NULL_HANDLE;
-
-            VkDescriptorBufferInfo storageBufferInfo{};
-            storageBufferInfo.buffer = shaderStorageBuffer;
-            storageBufferInfo.offset = 0;
-            storageBufferInfo.range = sizeof(dummy) * dummyCount;
-
-
-            array<VkWriteDescriptorSet, 3> descriptorWrites{};
-
-
             VkWriteDescriptorSet descriptorWrite{};
-            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = descriptorSets[i];
-            descriptorWrites[0].dstBinding = 0;
-            descriptorWrites[0].dstArrayElement = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pBufferInfo = &uniformBufferInfo;
-            descriptorWrites[0].pImageInfo = nullptr;       // Optional
-            descriptorWrites[0].pTexelBufferView = nullptr; // Optional
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = descriptorSetsPerFrame[i];
+            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pBufferInfo = &uniformBufferInfo;
+            descriptorWrite.pImageInfo = nullptr;       // Optional
+            descriptorWrite.pTexelBufferView = nullptr; // Optional
 
-            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = descriptorSets[i];
-            descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].dstArrayElement = 0;
-            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pImageInfo = &imageInfo;
-
-            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[2].dstSet = descriptorSets[i];
-            descriptorWrites[2].dstBinding = 2;
-            descriptorWrites[2].dstArrayElement = 0;
-            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            descriptorWrites[2].descriptorCount = 1;
-            descriptorWrites[2].pBufferInfo = &storageBufferInfo;
-
-
-            vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), &descriptorWrite, 0, nullptr);
+            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
         }
+
+        vector<VkDescriptorSetLayout> layoutsGlobal(1, descriptorSetLayoutGlobal);
+        VkDescriptorSetAllocateInfo allocInfoGlobal{};
+        allocInfoGlobal.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfoGlobal.descriptorPool = descriptorPool;
+        allocInfoGlobal.descriptorSetCount = 1;
+        allocInfoGlobal.pSetLayouts = layoutsGlobal.data();
+
+        if (vkAllocateDescriptorSets(device, &allocInfoGlobal, &descriptorSetGlobal) != VK_SUCCESS)
+        {
+            throw runtime_error("failed to allocate descriptor sets global");
+        }
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        imageInfo.imageView = outputImageView;
+        imageInfo.sampler = VK_NULL_HANDLE;
+
+        VkDescriptorBufferInfo storageBufferInfo{};
+        storageBufferInfo.buffer = shaderStorageBuffer;
+        storageBufferInfo.offset = 0;
+        storageBufferInfo.range = sizeof(dummy) * dummyCount;
+
+        array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSetGlobal;
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pImageInfo = &imageInfo;
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = descriptorSetGlobal;
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pBufferInfo = &storageBufferInfo;
+
+        vkUpdateDescriptorSets(device, 2, descriptorWrites.data(), 0, nullptr);
     }
 
     
@@ -1549,14 +1529,25 @@ private:
     {
         cleanupSwapChain();
 
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+            vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+        }
+
+        vkDestroyImage(device,outputImage, nullptr);
+        vkFreeMemory(device, outputImageMemory, nullptr);
+
+        vkDestroyBuffer(device, shaderStorageBuffer, nullptr);
+        vkFreeMemory(device, shaderStorageBufferMemory, nullptr);
 
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-        vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(device, descriptorSetLayoutPerFrame, nullptr);
+        vkDestroyDescriptorSetLayout(device, descriptorSetLayoutGlobal, nullptr);
 
-        // TODO Cleanup compute pipeline
-        //vkDestroyPipeline(device, graphicsPipeline, nullptr);
-        //vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        vkDestroyPipeline(device, computePipeline, nullptr);
+        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
