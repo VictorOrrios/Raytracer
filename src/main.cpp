@@ -34,8 +34,8 @@ using namespace std;
 //  Constants & global-scope helpers
 // -----------------------------------------------------------------------------
 // Initial window size
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH = 1920;
+const uint32_t HEIGHT = 1080;
 // Number of frames in the swapchain
 const int MAX_FRAMES_IN_FLIGHT = 2;
 // .spirv directory location
@@ -46,7 +46,10 @@ const vector<const char *> validationLayers = {
 // Extensions requiered to have
 const vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-
+// FPS counter variables
+double lastTime = glfwGetTime();
+int frameCount = 0;
+    
 // Enable validation layers only when DEBUG is defined.
 #ifdef DEBUG
 const bool enableValidationLayers = true;
@@ -177,6 +180,7 @@ private:
         {
             glfwPollEvents();
             drawFrame();
+            if(enableValidationLayers) showFPS();
         }
 
         vkDeviceWaitIdle(device);
@@ -744,13 +748,16 @@ private:
         // Prefer mailbox mode for double buffering and lower latency.
         for (const auto &availablePresentMode : availablePresentModes)
         {
-            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR)
             {
                 return availablePresentMode;
             }
         }
 
-        // FIFO mode is guaranteed to be available and acts like vertical sync.
+        //VK_PRESENT_MODE_MAILBOX_KHR VSync with triple buffering, allways keep latest frame
+        //throw runtime_error("failed to find vsync mode");
+
+        // FIFO mode is guaranteed to be available.
         return VK_PRESENT_MODE_FIFO_KHR;
     }
 
@@ -1638,7 +1645,25 @@ private:
         throw runtime_error("failed to find suitable memory type");
     }
 
-    
+    // Puts on screen the current fps
+    void showFPS() {
+        double currentTime = glfwGetTime();
+        double delta = currentTime - lastTime;
+        frameCount++;
+        
+        if (delta >= 1.0) {
+            double fps = frameCount / delta;
+            std::cout << "FPS: " << fps << std::endl;
+            
+            // Actualiza título de ventana (opcional)
+            std::string title = "Vulkan App - FPS: " + std::to_string((int)fps);
+            glfwSetWindowTitle(window, title.c_str());
+            
+            frameCount = 0;
+            lastTime = currentTime;
+        }
+    }
+
 
 };
 
