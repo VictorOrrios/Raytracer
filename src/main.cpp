@@ -52,20 +52,28 @@ const bool enableValidationLayers = false;
 
 
 // TODO Replace with something NOT dummy :p
-struct dummy{
-    glm::vec2 x;
+struct Sphere{
+    glm::vec3 pos;
+    float r;
 };
-int dummyCount = 10;
+const int sphereCount = 3;
 
 
 struct Camera{
-    glm::vec3 location;
-    glm::vec3 direction;
+    glm::mat4 view;
+    glm::mat4 proj;
+    glm::mat4 viewproj;
+    glm::vec3 position;
 };
 
 struct UniformBufferObject
 {
     Camera camera;
+};
+
+struct SSBObject{
+    Sphere sphereVec[sphereCount];
+    int numSphere;
 };
 
 
@@ -1136,8 +1144,33 @@ private:
     void updateUniformBuffer(uint32_t currentImage)
     {
         UniformBufferObject ubo{};
-        ubo.camera.location = glm::vec3(0.0,0.0,0.0);
-        ubo.camera.direction = glm::vec3(0.0,0.0,1.0);
+        glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 0.0f); 
+        glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 1.0f); 
+        glm::vec3 upVector = glm::vec3(0.0f, 1.0f, 0.0f); 
+        ubo.camera.view = glm::lookAt(
+            cameraPos,    
+            cameraTarget + cameraPos,
+            upVector     
+        );
+
+        float fov = 45.0f; 
+        float aspectRatio = swapChainExtent.width/swapChainExtent.height;
+        float nearClip = 0.1f; 
+        float farClip = 100.0f; 
+
+        ubo.camera.proj = glm::perspective(
+            glm::radians(fov), 
+            aspectRatio,
+            nearClip,
+            farClip
+        );
+
+        //ubo.camera.proj[1][1] *= -1;
+
+        ubo.camera.viewproj = ubo.camera.view * ubo.camera.proj;
+
+        ubo.camera.position = cameraPos;
+        
 
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
@@ -1200,9 +1233,18 @@ private:
     // ---------------- SSBO creation ------------------------------------------------
     void createShaderStorageBuffer(){
         
-        vector<dummy> dummyVec(dummyCount);
+        vector<Sphere> sphereVec(sphereCount);
+
+        sphereVec[0].pos = glm::vec3(0.0,0.0,10.0);
+        sphereVec[0].r = 5.0;
+
+        sphereVec[1].pos = glm::vec3(5.0,0.0,10.0);
+        sphereVec[1].r = 2.0;
+
+        sphereVec[2].pos = glm::vec3(-7.0,2.0,10.0);
+        sphereVec[2].r = 3.0;
         
-        VkDeviceSize bufferSize = sizeof(dummy) * dummyCount;
+        VkDeviceSize bufferSize = sizeof(Sphere) * sphereCount;
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -1212,7 +1254,7 @@ private:
 
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-            memcpy(data, dummyVec.data(), (size_t)bufferSize);
+            memcpy(data, sphereVec.data(), (size_t)bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
@@ -1355,7 +1397,7 @@ private:
         VkDescriptorBufferInfo storageBufferInfo{};
         storageBufferInfo.buffer = shaderStorageBuffer;
         storageBufferInfo.offset = 0;
-        storageBufferInfo.range = sizeof(dummy) * dummyCount;
+        storageBufferInfo.range = sizeof(Sphere) * sphereCount;
 
         array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
