@@ -4,9 +4,12 @@
 
 struct Camera{
     mat4 view;
+    mat4 viewInv;
     mat4 proj;
+    mat4 projInv;
     mat4 viewproj;
     vec3 position;
+    float tanHalfFOV;
 };
 struct Ray{
     vec3 orig;
@@ -72,16 +75,19 @@ vec4 ray_color(Ray r){
 void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
     ivec2 imageSize = imageSize(outputImage);
-    
-    vec2 uv = (vec2(pixelCoords) * 2.0 / vec2(imageSize)) - 1.0;
+    float aspectRatio = float(imageSize.x)/float(imageSize.y);
+
+    float ndcX = 2.0 * pixelCoords.x / imageSize.x - 1.0;
+    float ndcY = 1.0 - 2.0 * pixelCoords.y / imageSize.y;
 
 
-    vec3 rayDir = vec3(
-        -uv.x * imageSize.x/imageSize.y, 
-        -uv.y,
-        -1.0 
-    );
-    rayDir = normalize(ubo.camera.view * vec4(rayDir, 0.0)).xyz;
+    vec3 rayDirCameraSpace = normalize(vec3(
+        ndcX * aspectRatio * ubo.camera.tanHalfFOV,
+        ndcY * ubo.camera.tanHalfFOV,
+        -1.0
+    ));
+
+    vec3 rayDir = normalize(vec3(ubo.camera.viewInv * vec4(rayDirCameraSpace, 0.0)));
 
 
     Ray ray;

@@ -61,9 +61,12 @@ const int sphereCount = 3;
 
 struct Camera{
     glm::mat4 view;
+    glm::mat4 viewInv;
     glm::mat4 proj;
+    glm::mat4 projInv;
     glm::mat4 viewproj;
     glm::vec3 position;
+    float tanHalfFOV;
 };
 
 struct UniformBufferObject
@@ -1153,6 +1156,8 @@ private:
             upVector     
         );
 
+        ubo.camera.viewInv = glm::inverse(ubo.camera.view); 
+
         float fov = 45.0f; 
         float aspectRatio = swapChainExtent.width/swapChainExtent.height;
         float nearClip = 0.1f; 
@@ -1165,11 +1170,16 @@ private:
             farClip
         );
 
-        //ubo.camera.proj[1][1] *= -1;
+        ubo.camera.proj[1][1] *= -1.0f;
+
+
+        ubo.camera.projInv = glm::inverse(ubo.camera.proj);
 
         ubo.camera.viewproj = ubo.camera.view * ubo.camera.proj;
 
         ubo.camera.position = cameraPos;
+
+        ubo.camera.tanHalfFOV = tan(glm::radians(fov) / 2.0);
         
 
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
@@ -1235,14 +1245,14 @@ private:
         
         vector<Sphere> sphereVec(sphereCount);
 
-        sphereVec[0].pos = glm::vec3(0.0,0.0,10.0);
-        sphereVec[0].r = 5.0;
+        sphereVec[0].pos = glm::vec3(0.0,0.0,3.0);
+        sphereVec[0].r = 0.3;
 
-        sphereVec[1].pos = glm::vec3(5.0,0.0,10.0);
-        sphereVec[1].r = 2.0;
+        sphereVec[1].pos = glm::vec3(1.0,0.0,3.0);
+        sphereVec[1].r = 0.3;
 
-        sphereVec[2].pos = glm::vec3(-7.0,2.0,10.0);
-        sphereVec[2].r = 3.0;
+        sphereVec[2].pos = glm::vec3(-1.0,0.0,3.0);
+        sphereVec[2].r = 0.3;
         
         VkDeviceSize bufferSize = sizeof(Sphere) * sphereCount;
 
