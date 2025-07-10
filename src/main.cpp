@@ -1,12 +1,5 @@
-// Build with: g++ -std=c++17 main.cpp -lglfw -lvulkan
-// -----------------------------------------------------------------------------
-//  Simple “Hello Triangle” Vulkan application using GLFW for window creation.
-//  From https://vulkan-tutorial.com and written by me :) (Victor)
-// -----------------------------------------------------------------------------
-
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 
@@ -65,12 +58,14 @@ struct dummy{
 int dummyCount = 10;
 
 
+struct Camera{
+    glm::vec3 location;
+    glm::vec3 direction;
+};
 
 struct UniformBufferObject
 {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
+    Camera camera;
 };
 
 
@@ -929,9 +924,7 @@ private:
             array<VkDescriptorSet,2> descriptorSets= {descriptorSetsPerFrame[currentFrame],descriptorSetGlobal};
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptorSets.data(), 0, 0);
 
-            int width = 0, height = 0;
-            getWidthHeigth(width,height);
-            vkCmdDispatch(commandBuffer, swapChainExtent.width, swapChainExtent.height, 1);
+            vkCmdDispatch(commandBuffer, (swapChainExtent.width + 15) / 16, (swapChainExtent.height + 15) / 16, 1);
 
             VkImageMemoryBarrier startBarriers[2]{};
             startBarriers[0] = createMemoryBarrier(outputImage,
@@ -1123,6 +1116,7 @@ private:
     }
 
     // ---------------- Update UBO for animation ------------------------------------------------
+    /*
     void updateUniformBuffer(uint32_t currentImage)
     {
         static auto startTime = chrono::high_resolution_clock::now();
@@ -1138,6 +1132,16 @@ private:
 
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
+        */
+    void updateUniformBuffer(uint32_t currentImage)
+    {
+        UniformBufferObject ubo{};
+        ubo.camera.location = glm::vec3(0.0,0.0,0.0);
+        ubo.camera.direction = glm::vec3(0.0,0.0,1.0);
+
+        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+    }
+
 
     // ---------------- Image buffer creation ------------------------------------------------
     void createImageBuffer(int width, int height){
@@ -1653,10 +1657,9 @@ private:
         
         if (delta >= 1.0) {
             double fps = frameCount / delta;
-            std::cout << "FPS: " << fps << std::endl;
+            //cout << "FPS: " << fps << endl;
             
-            // Actualiza título de ventana (opcional)
-            std::string title = "Vulkan App - FPS: " + std::to_string((int)fps);
+            string title = "Vulkan App - FPS: " + to_string((int)fps);
             glfwSetWindowTitle(window, title.c_str());
             
             frameCount = 0;
@@ -1667,9 +1670,6 @@ private:
 
 };
 
-// -----------------------------------------------------------------------------
-//  Program entry point
-// -----------------------------------------------------------------------------
 int main()
 {
     RaytracingApp app;
