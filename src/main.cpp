@@ -19,6 +19,7 @@
 #include <array>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/euler_angles.hpp>
 #include <chrono>
 
 using namespace std;
@@ -56,7 +57,7 @@ struct Sphere{
     glm::vec3 pos;
     float r;
 };
-const int sphereCount = 3;
+const int sphereCount = 4;
 
 
 struct Camera{
@@ -74,12 +75,25 @@ struct UniformBufferObject
     Camera camera;
 };
 
-struct SSBObject{
-    Sphere sphereVec[sphereCount];
-    int numSphere;
-};
+float speed = 1.0;
 
+glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f, 0.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
+glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
+const glm::vec4 worldFront = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+const glm::vec4 worldUp    = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+
+float yaw   = 0.0f;
+float pitch = 0.0f;
+float roll = 0.0f;
+glm::mat4 rotation = glm::yawPitchRoll(
+    glm::radians(yaw),
+    glm::radians(pitch),
+    glm::radians(roll)
+);
+bool mouseCaptured = true;
+static bool firstMouse = true;
 
 
 
@@ -182,9 +196,15 @@ private:
     // ---------------- Main loop ------------------------------------
     void mainLoop()
     {
+        float deltaTime, lastFrame;
         while (!glfwWindowShouldClose(window))
         {
+            float currentFrame = glfwGetTime();
+            deltaTime = currentFrame - lastFrame;
+            lastFrame = currentFrame;
+
             glfwPollEvents();
+            processInput(window, deltaTime);
             drawFrame();
             if(enableValidationLayers) showFPS();
         }
@@ -261,16 +281,137 @@ private:
     {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // We’ll use Vulkan, not OpenGL
-
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
         glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        glfwSetCursorPosCallback(window, mouse_callback);
+        glfwSetMouseButtonCallback(window, focus_callback);
     }
 
     static void framebufferResizeCallback(GLFWwindow *window, int width, int height)
     {
         auto app = reinterpret_cast<RaytracingApp *>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
+    }
+
+    void processInput(GLFWwindow* window, float deltaTime) {
+        float cameraSpeed = speed * deltaTime;
+        float rollSpeed = 80.0 * deltaTime;
+        float shiftMult = 2.5;
+        bool rotateMatrix = false;
+        /*
+        cout<<"Yaw "<<yaw<<" Pitch "<<pitch<<endl;
+        cout<<"Camera dir "<<cameraFront.x<<","<<cameraFront.y<<","<<cameraFront.z<<endl;
+        cout<<"Camera pos "<<cameraPos.x<<","<<cameraPos.y<<","<<cameraPos.z<<endl;
+        */
+
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
+            cameraSpeed *= shiftMult;
+            rollSpeed *= shiftMult;
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            cameraPos += cameraSpeed * cameraFront;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            cameraPos -= cameraSpeed * cameraFront;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+            cameraPos += cameraSpeed * cameraUp;
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS)
+            glfwSetWindowShouldClose(window,true);
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+            cameraPos -= cameraSpeed * cameraUp;
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS){
+            roll -= rollSpeed;
+            rotateMatrix = true;
+        }
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS){
+            roll += rollSpeed;
+            rotateMatrix = true;
+        }
+        if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS){
+            roll = 0.0;
+            rotateMatrix = true;
+        }
+        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS){
+            roll = 0.0;
+            pitch = 0.0;
+            yaw = 0.0;
+            cameraPos = glm::vec3(0.0,0.0,0.0);
+            rotateMatrix = true;
+        }
+
+        if(rotateMatrix){
+            if(roll>360.0) roll -= 360.0;
+            if(roll<0.0) roll += 360.0;
+            rotation = glm::yawPitchRoll(
+                -glm::radians(yaw),
+                -glm::radians(pitch),
+                glm::radians(roll)
+            );
+            cameraFront = glm::normalize(glm::vec3(rotation * worldFront));
+            cameraUp = glm::normalize(glm::vec3(rotation * worldUp));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS){
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            mouseCaptured = false;
+        }
+    }
+
+    static void focus_callback(GLFWwindow* window, int button, int action, int mods){
+        if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && !mouseCaptured) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // capturar cursor
+            mouseCaptured = true;
+            firstMouse = true;
+        }
+    }
+
+
+    static void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+        
+        static float lastX = 800.0f / 2.0f;
+        static float lastY = 600.0f / 2.0f;
+        
+
+        if(!mouseCaptured) return;
+
+        if (firstMouse) {
+            lastX = xpos;
+            lastY = ypos;
+            firstMouse = false;
+        }
+
+        float xoffset = xpos - lastX;
+        float yoffset = lastY - ypos;
+        lastX = xpos;
+        lastY = ypos;
+
+        float sensitivity = 0.1f;
+        xoffset *= sensitivity;
+        yoffset *= sensitivity;
+
+        float rollRad = -glm::radians(roll);
+        yaw   += xoffset * cos(rollRad) - yoffset * sin(rollRad);
+        pitch += xoffset * sin(rollRad) + yoffset * cos(rollRad);
+
+        if (pitch > 89.0f)
+            pitch = 89.0f;
+        if (pitch < -89.0f)
+            pitch = -89.0f;
+
+        rotation = glm::yawPitchRoll(
+            -glm::radians(yaw),
+            -glm::radians(pitch),
+            glm::radians(roll)
+        );
+
+        cameraFront = glm::normalize(glm::vec3(rotation * worldFront));
+        cameraUp = glm::normalize(glm::vec3(rotation * worldUp));
     }
 
     // ---------------- Vulkan initialization pipeline ------------------------------------
@@ -761,6 +902,8 @@ private:
         }
 
         //VK_PRESENT_MODE_MAILBOX_KHR VSync with triple buffering, allways keep latest frame
+        //VK_PRESENT_MODE_FIFO_KHR Double buffering if queue is full it waits
+        //VK_PRESENT_MODE_IMMEDIATE_KHR Allways fresher frame, no throtle
         //throw runtime_error("failed to find vsync mode");
 
         // FIFO mode is guaranteed to be available.
@@ -1147,13 +1290,10 @@ private:
     void updateUniformBuffer(uint32_t currentImage)
     {
         UniformBufferObject ubo{};
-        glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 0.0f); 
-        glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 1.0f); 
-        glm::vec3 upVector = glm::vec3(0.0f, 1.0f, 0.0f); 
         ubo.camera.view = glm::lookAt(
             cameraPos,    
-            cameraTarget + cameraPos,
-            upVector     
+            cameraPos + cameraFront,
+            cameraUp     
         );
 
         ubo.camera.viewInv = glm::inverse(ubo.camera.view); 
@@ -1245,14 +1385,17 @@ private:
         
         vector<Sphere> sphereVec(sphereCount);
 
-        sphereVec[0].pos = glm::vec3(0.0,0.0,3.0);
-        sphereVec[0].r = 0.3;
+        sphereVec[0].pos = glm::vec3(0.0,0.0,10.0);
+        sphereVec[0].r = 1.0;
 
-        sphereVec[1].pos = glm::vec3(1.0,0.0,3.0);
-        sphereVec[1].r = 0.3;
+        sphereVec[1].pos = glm::vec3(3.0,0.0,10.0);
+        sphereVec[1].r = 1.0;
 
-        sphereVec[2].pos = glm::vec3(-1.0,0.0,3.0);
-        sphereVec[2].r = 0.3;
+        sphereVec[2].pos = glm::vec3(-3.0,0.0,10.0);
+        sphereVec[2].r = 1.0;
+
+        sphereVec[3].pos = glm::vec3(-1.0,-1000.0,10.0);
+        sphereVec[3].r = 999.0;
         
         VkDeviceSize bufferSize = sizeof(Sphere) * sphereCount;
 

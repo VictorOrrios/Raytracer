@@ -20,13 +20,6 @@ struct Sphere{
     float r;
 };
 
-
-
-
-vec3 at(Ray r, float t){
-    return r.orig + t*r.dir;
-}
-
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     Camera camera;
 } ubo;
@@ -41,26 +34,31 @@ layout(local_size_x = 16, local_size_y = 16) in;
 
 
 
+vec3 at(Ray r, float t){
+    return r.orig + t*r.dir;
+}
 
-
-bool hit_sphere(const vec3 center, float radius, const Ray r){
+float hit_sphere(const vec3 center, float radius, const Ray r){
     vec3 oc = center - r.orig;
     float a = dot(r.dir,r.dir);
     float b = -2.0 * dot(r.dir,oc);
     float c = dot(oc,oc) - radius*radius;
     float discriminant = b*b - 4*a*c;
-    return discriminant >= 0;
+    if (discriminant < 0) {
+        return -1.0;
+    } else {
+        return (-b + sqrt(discriminant) ) / (2.0*a);
+    }
 }
 
 vec4 ray_color(Ray r){
-    
-
     for(int i = 0; i< spheres.length(); i++){
-        if(hit_sphere(spheres[i].pos,spheres[i].r,r)){
-            return vec4(1.0-float(i)/float(spheres.length()), 0.0, 0.0, 1.0);
+        float t = hit_sphere(spheres[i].pos,spheres[i].r,r);
+        if(t > 0.0){
+            vec3 N = normalize(at(r,t) - spheres[i].pos);
+            return vec4(N.x+1.0, N.y + 1.0, N.z + 1.0, 1.0)* 0.5;
         }
     }
-
 
     vec3 dir_unit = normalize(r.dir);
     float a = 0.5*(dir_unit.y + 1.0);
