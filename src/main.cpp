@@ -22,7 +22,10 @@
 #include <glm/gtx/euler_angles.hpp>
 #include <chrono>
 
+#include "scene.hpp"
+
 using namespace std;
+
 
 // -----------------------------------------------------------------------------
 //  Constants & global-scope helpers
@@ -43,6 +46,8 @@ const vector<const char *> deviceExtensions = {
 // FPS counter variables
 double lastTime = glfwGetTime();
 int frameCount = 0;
+
+const bool planeMode = false;
     
 // Enable validation layers only when DEBUG is defined.
 #ifdef DEBUG
@@ -50,14 +55,6 @@ const bool enableValidationLayers = true;
 #else
 const bool enableValidationLayers = false;
 #endif
-
-
-// TODO Replace with something NOT dummy :p
-struct Sphere{
-    glm::vec3 pos;
-    float r;
-};
-const int sphereCount = 4;
 
 
 struct Camera{
@@ -74,6 +71,7 @@ struct UniformBufferObject
 {
     Camera camera;
 };
+
 
 float speed = 1.0;
 
@@ -92,9 +90,11 @@ glm::mat4 rotation = glm::yawPitchRoll(
     glm::radians(pitch),
     glm::radians(roll)
 );
+
 bool mouseCaptured = true;
 static bool firstMouse = true;
 
+Scene scene;
 
 
 // -----------------------------------------------------------------------------
@@ -300,31 +300,33 @@ private:
         float rollSpeed = 80.0 * deltaTime;
         float shiftMult = 2.5;
         bool rotateMatrix = false;
-        /*
-        cout<<"Yaw "<<yaw<<" Pitch "<<pitch<<endl;
-        cout<<"Camera dir "<<cameraFront.x<<","<<cameraFront.y<<","<<cameraFront.z<<endl;
-        cout<<"Camera pos "<<cameraPos.x<<","<<cameraPos.y<<","<<cameraPos.z<<endl;
-        */
 
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
             cameraSpeed *= shiftMult;
             rollSpeed *= shiftMult;
         }
 
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        if(planeMode){
             cameraPos += cameraSpeed * cameraFront;
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-            cameraPos -= cameraSpeed * cameraFront;
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-            cameraPos += cameraSpeed * cameraUp;
+        }else{
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+                cameraPos += cameraSpeed * cameraFront;
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+                cameraPos -= cameraSpeed * cameraFront;
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+                cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+                cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+            if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+                cameraPos += cameraSpeed * glm::vec3(worldUp);
+            if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+                cameraPos -= cameraSpeed * glm::vec3(worldUp);
+        }
+
+
         if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS)
             glfwSetWindowShouldClose(window,true);
-        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-            cameraPos -= cameraSpeed * cameraUp;
+        
         if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS){
             roll -= rollSpeed;
             rotateMatrix = true;
@@ -895,7 +897,7 @@ private:
         // Prefer mailbox mode for double buffering and lower latency.
         for (const auto &availablePresentMode : availablePresentModes)
         {
-            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR)
+            if (availablePresentMode == VK_PRESENT_MODE_FIFO_KHR)
             {
                 return availablePresentMode;
             }
@@ -1383,21 +1385,7 @@ private:
     // ---------------- SSBO creation ------------------------------------------------
     void createShaderStorageBuffer(){
         
-        vector<Sphere> sphereVec(sphereCount);
-
-        sphereVec[0].pos = glm::vec3(0.0,0.0,10.0);
-        sphereVec[0].r = 1.0;
-
-        sphereVec[1].pos = glm::vec3(3.0,0.0,10.0);
-        sphereVec[1].r = 1.0;
-
-        sphereVec[2].pos = glm::vec3(-3.0,0.0,10.0);
-        sphereVec[2].r = 1.0;
-
-        sphereVec[3].pos = glm::vec3(-1.0,-1000.0,10.0);
-        sphereVec[3].r = 999.0;
-        
-        VkDeviceSize bufferSize = sizeof(Sphere) * sphereCount;
+        VkDeviceSize bufferSize = sizeof(Sphere) * scene.sphereVec.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -1407,7 +1395,7 @@ private:
 
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-            memcpy(data, sphereVec.data(), (size_t)bufferSize);
+            memcpy(data, scene.sphereVec.data(), (size_t)bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
@@ -1550,7 +1538,7 @@ private:
         VkDescriptorBufferInfo storageBufferInfo{};
         storageBufferInfo.buffer = shaderStorageBuffer;
         storageBufferInfo.offset = 0;
-        storageBufferInfo.range = sizeof(Sphere) * sphereCount;
+        storageBufferInfo.range = sizeof(Sphere) * scene.sphereVec.size();
 
         array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
@@ -1862,8 +1850,9 @@ private:
         }
     }
 
-
 };
+
+
 
 int main()
 {

@@ -1,7 +1,6 @@
 #version 450
-// ------------  --------------
 
-
+// ------------ Struct definitions --------------
 struct Camera{
     mat4 view;
     mat4 viewInv;
@@ -11,15 +10,25 @@ struct Camera{
     vec3 position;
     float tanHalfFOV;
 };
+
 struct Ray{
     vec3 orig;
     vec3 dir;
 };
+
 struct Sphere{
-    vec3 pos;
-    float r;
+    vec3 pos; // Coordinates of the center
+    float r; // Radius
 };
 
+struct Hit{
+    vec3 p; // Where it happend
+    vec3 normal; // The normal where it hit
+    float t; // The distance from the ray origin to the hit
+    bool frontFace; // True if hit is to a front facing surface
+};
+
+// ------------ External memory layout --------------
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     Camera camera;
 } ubo;
@@ -30,34 +39,87 @@ layout(set = 1, std140, binding = 1) buffer ParticleSSBOOut {
     Sphere spheres[];
 };
 
+// ------------ Workgroup sizes --------------
 layout(local_size_x = 16, local_size_y = 16) in;
 
 
-
-vec3 at(Ray r, float t){
+// ------------ Ray functions --------------
+// Having the length of a hit (t) returns the point where it hit
+vec3 at(const Ray r, const float t){
     return r.orig + t*r.dir;
 }
 
-float hit_sphere(const vec3 center, float radius, const Ray r){
-    vec3 oc = center - r.orig;
-    float a = dot(r.dir,r.dir);
-    float b = -2.0 * dot(r.dir,oc);
-    float c = dot(oc,oc) - radius*radius;
-    float discriminant = b*b - 4*a*c;
-    if (discriminant < 0) {
-        return -1.0;
-    } else {
-        return (-b + sqrt(discriminant) ) / (2.0*a);
+
+// ------------ Hit record functions --------------
+// Having the outward facing normal of the surface hit
+// updates the record frontFace and normal to correct values
+void set_face_normal(inout Hit h, const Ray r, const vec3 outward_normal){
+    h.frontFace = dot(r.dir,outward_normal) < 0;
+    if(h.frontFace){
+        h.normal = outward_normal;
+    }else{
+        h.normal = -outward_normal;
     }
 }
 
-vec4 ray_color(Ray r){
-    for(int i = 0; i< spheres.length(); i++){
-        float t = hit_sphere(spheres[i].pos,spheres[i].r,r);
-        if(t > 0.0){
-            vec3 N = normalize(at(r,t) - spheres[i].pos);
-            return vec4(N.x+1.0, N.y + 1.0, N.z + 1.0, 1.0)* 0.5;
+// ------------ Spheres functions --------------
+// Returns true if the ray colides with the sphere
+// If it hits it fills out th hit record
+bool hit_sphere(const Sphere s, const float ray_tmin, const float ray_tmax, const Ray r, out Hit rec){
+    vec3 oc = s.pos - r.orig;
+    float a = dot(r.dir,r.dir);
+    float h = dot(r.dir, oc);
+    float c = dot(oc,oc) - s.r*s.r;
+    float discriminant = h*h - a*c;
+    if (discriminant < 0) {
+        return false;
+    } 
+
+    float srtd = sqrt(discriminant);
+
+    float root = (h - srtd) / a;
+    if(root <= ray_tmin || ray_tmax <= root){
+        root = (h + srtd) / a;
+        if(root <= ray_tmin || ray_tmax <= root){
+            return false;
         }
+    }
+
+    rec.t = root;
+    rec.p = at(r,root);
+    vec3 outward_normal = (rec.p - s.pos) / s.r;
+    set_face_normal(rec, r, outward_normal);
+
+    return true;
+}
+
+// ------------ Scene functions --------------
+// Calculates the hit record for the ray
+// ray_tmin and ray_tmax to be investigated
+bool hit_scene(const Ray r, const float ray_tmin, const float ray_tmax, inout Hit rec){
+    Hit temp_rec;
+    bool hit_anything = false;
+    float closest_so_far = ray_tmax;
+
+    // For every sphere in the scene
+    for(int i = 0; i< spheres.length(); i++){
+        if(hit_sphere(spheres[i],ray_tmin,ray_tmax,r,temp_rec)){
+            hit_anything = true;
+            if(closest_so_far > temp_rec.t){
+                closest_so_far = temp_rec.t;
+                rec = temp_rec;
+            }
+        }
+    }
+
+    return hit_anything;
+}
+
+// Calculates the color of the ray by tracing it with the scene
+vec4 ray_color(Ray r){
+    Hit h;
+    if(hit_scene(r,0,100,h)){
+        return vec4(h.normal.z + vec3(1.0,1.0,1.0)* 0.5,1.0);
     }
 
     vec3 dir_unit = normalize(r.dir);
@@ -67,17 +129,16 @@ vec4 ray_color(Ray r){
 
 
 
-
-
-
 void main() {
+    // Enviroment variables
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
     ivec2 imageSize = imageSize(outputImage);
     float aspectRatio = float(imageSize.x)/float(imageSize.y);
 
+    // Pixel coordinates to ray direction
+
     float ndcX = 2.0 * pixelCoords.x / imageSize.x - 1.0;
     float ndcY = 1.0 - 2.0 * pixelCoords.y / imageSize.y;
-
 
     vec3 rayDirCameraSpace = normalize(vec3(
         ndcX * aspectRatio * ubo.camera.tanHalfFOV,
@@ -87,14 +148,15 @@ void main() {
 
     vec3 rayDir = normalize(vec3(ubo.camera.viewInv * vec4(rayDirCameraSpace, 0.0)));
 
-
+    // Ray of the pixel asigned
     Ray ray;
     ray.orig = ubo.camera.position;
     ray.dir = rayDir;
 
+    // Calculate color of pixel
     vec4 color = ray_color(ray);
-    //color.w = color.x*color.y*color.z;
+    color.w = 1.0; // Solid, no transparency
     
+    // Store color
     imageStore(outputImage, pixelCoords, color.zyxw);
-
 }
