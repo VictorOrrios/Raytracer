@@ -56,7 +56,7 @@ const vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 // World vetors
-const glm::vec4 worldFront = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+const glm::vec4 worldFront = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
 const glm::vec4 worldUp    = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
 
 // Camera control speeds
@@ -71,10 +71,11 @@ const float farClip = 100.0f;
 
 // Initial parameters for the camera
 const glm::vec3 cameraPositionInitial = glm::vec3(0.0f, 0.0f, 0.0f);
-const glm::vec3 cameraFrontInitial = worldFront;
-const glm::vec3 cameraUpInitial = worldUp;
-const float yawInitial = 0.0f;
-const float pitchInitial = 0.0f;
+const glm::vec3 cameraFrontInitial = glm::vec3(worldFront);
+const glm::vec3 cameraUpInitial = glm::vec3(worldUp);
+const glm::vec3 frontVectorTemp = cameraFrontInitial-cameraPositionInitial;
+const float yawInitial = glm::degrees(glm::atan(frontVectorTemp.x,-frontVectorTemp.z));
+const float pitchInitial = glm::degrees(glm::asin(frontVectorTemp.y));
 const float rollInitial = 0.0f;
 
 // If true disables keyboard movement and aplies constant forward velocity
@@ -324,6 +325,8 @@ private:
     // ---------------- GLFW input handling ------------------------------------
     // Keyboard controller
     void processInput(GLFWwindow* window, float deltaTime) {
+        if(!mouseCaptured) return;
+        
         float moveSpeedDelta = moveSpeed * deltaTime;
         float rollSpeedDelta = rollSpeed * deltaTime;
         
@@ -364,27 +367,21 @@ private:
             rotateMatrix = true;
         }
         if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS){
-            roll = 0.0;
+            roll = rollInitial;
             rotateMatrix = true;
         }
         if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS){
-            roll = 0.0;
-            pitch = 0.0;
-            yaw = 0.0;
-            cameraPos = glm::vec3(0.0,0.0,0.0);
+            roll = rollInitial;
+            pitch = pitchInitial;
+            yaw = yawInitial;
+            cameraPos = cameraPositionInitial;
             rotateMatrix = true;
         }
 
         if(rotateMatrix){
             if(roll>360.0) roll -= 360.0;
             if(roll<0.0) roll += 360.0;
-            rotation = glm::yawPitchRoll(
-                -glm::radians(yaw),
-                -glm::radians(pitch),
-                glm::radians(roll)
-            );
-            cameraFront = glm::normalize(glm::vec3(rotation * worldFront));
-            cameraUp = glm::normalize(glm::vec3(rotation * worldUp));
+            updateCamera();
         }
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS){
@@ -405,9 +402,8 @@ private:
     // Mouse controller
     void mouse_callback(double xpos, double ypos) {
         
-        static float lastX = 800.0f / 2.0f;
-        static float lastY = 600.0f / 2.0f;
-        
+        static float lastX;
+        static float lastY;
 
         if(!mouseCaptured) return;
 
@@ -435,10 +431,18 @@ private:
         if (pitch < -89.0f)
             pitch = -89.0f;
 
+        if(yaw>360.0) yaw -= 360.0;
+        if(yaw<0.0) yaw += 360.0;
+
+        updateCamera();
+    }
+
+    // Updates rotation matrix and camera front and up
+    void updateCamera(){
         rotation = glm::yawPitchRoll(
             -glm::radians(yaw),
-            -glm::radians(pitch),
-            glm::radians(roll)
+            glm::radians(pitch),
+            -glm::radians(roll)
         );
 
         cameraFront = glm::normalize(glm::vec3(rotation * worldFront));
@@ -1300,27 +1304,11 @@ private:
         }
     }
 
-    // ---------------- Update UBO for animation ------------------------------------------------
-    /*
-    void updateUniformBuffer(uint32_t currentImage)
-    {
-        static auto startTime = chrono::high_resolution_clock::now();
-
-        auto currentTime = chrono::high_resolution_clock::now();
-        float time = chrono::duration<float, chrono::seconds::period>(currentTime - startTime).count();
-
-        UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1; // Since we are working with Vulkan and not OpenGL we need to flip
-
-        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
-    }
-        */
+    // ---------------- UBO update per each frame ------------------------------------------------
     void updateUniformBuffer(uint32_t currentImage)
     {
         UniformBufferObject ubo{};
+        
         ubo.camera.view = glm::lookAt(
             cameraPos,    
             cameraPos + cameraFront,
@@ -1328,20 +1316,16 @@ private:
         );
 
         ubo.camera.viewInv = glm::inverse(ubo.camera.view); 
-
         
         float aspectRatio = swapChainExtent.width/swapChainExtent.height;
         
-
         ubo.camera.proj = glm::perspective(
             glm::radians(fov), 
             aspectRatio,
             nearClip,
             farClip
         );
-
-        ubo.camera.proj[1][1] *= -1.0f;
-
+        //ubo.camera.proj[1][1] *= -1.0f;
 
         ubo.camera.projInv = glm::inverse(ubo.camera.proj);
 

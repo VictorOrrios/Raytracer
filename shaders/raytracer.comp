@@ -16,6 +16,11 @@ struct Ray{
     vec3 dir;
 };
 
+struct Interval{
+    float minV;
+    float maxV;
+};
+
 struct Sphere{
     vec3 pos; // Coordinates of the center
     float r; // Radius
@@ -27,6 +32,14 @@ struct Hit{
     float t; // The distance from the ray origin to the hit
     bool frontFace; // True if hit is to a front facing surface
 };
+
+// ------------ Constant definitions --------------
+const int rays_per_pixel = 100;
+
+const float pInf = 1.0 / 0.0;
+const float nInf = -1.0 / 0.0;
+const Interval empty_interval = Interval(pInf, nInf);
+const Interval universe_interval = Interval(nInf, pInf);
 
 // ------------ External memory layout --------------
 layout(set = 0, binding = 0) uniform UniformBufferObject {
@@ -42,6 +55,40 @@ layout(set = 1, std140, binding = 1) buffer ParticleSSBOOut {
 // ------------ Workgroup sizes --------------
 layout(local_size_x = 16, local_size_y = 16) in;
 
+// Global variables
+ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
+ivec2 imageSize = imageSize(outputImage);
+float aspectRatio = float(imageSize.x)/float(imageSize.y);
+
+uint seed;
+
+
+// ------------ RNG functions --------------
+
+uint hash(uint x) {
+    x ^= x >> 16;
+    x *= 0x7feb352dU;
+    x ^= x >> 15;
+    x *= 0x846ca68bU;
+    x ^= x >> 16;
+    return x;
+}
+
+uint xorshift(inout uint state) {
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+    return state;
+}
+
+float random() {
+    return float(xorshift(seed)) / 4294967295.0; // Dividir por 2^32 - 1
+}
+
+vec2 sample_square(){
+    return vec2(random()-0.5,random()-0.5);
+}
+
 
 // ------------ Ray functions --------------
 // Having the length of a hit (t) returns the point where it hit
@@ -49,6 +96,18 @@ vec3 at(const Ray r, const float t){
     return r.orig + t*r.dir;
 }
 
+// ------------ Interval functions --------------
+bool contains(Interval i, float x){
+    return i.minV <= x && i.maxV >= x;
+}
+bool surrounds(Interval i, float x){
+    return i.minV < x && i.maxV > x;
+}
+float clamp(Interval i, float x){
+    if(x < i.minV) return i.minV; 
+    if(x > i.maxV) return i.maxV;
+    return x;
+}
 
 // ------------ Hit record functions --------------
 // Having the outward facing normal of the surface hit
@@ -65,7 +124,7 @@ void set_face_normal(inout Hit h, const Ray r, const vec3 outward_normal){
 // ------------ Spheres functions --------------
 // Returns true if the ray colides with the sphere
 // If it hits it fills out th hit record
-bool hit_sphere(const Sphere s, const float ray_tmin, const float ray_tmax, const Ray r, out Hit rec){
+bool hit_sphere(const Sphere s, const Interval ray_t, const Ray r, out Hit rec){
     vec3 oc = s.pos - r.orig;
     float a = dot(r.dir,r.dir);
     float h = dot(r.dir, oc);
@@ -78,9 +137,9 @@ bool hit_sphere(const Sphere s, const float ray_tmin, const float ray_tmax, cons
     float srtd = sqrt(discriminant);
 
     float root = (h - srtd) / a;
-    if(root <= ray_tmin || ray_tmax <= root){
+    if(!surrounds(ray_t,root)){
         root = (h + srtd) / a;
-        if(root <= ray_tmin || ray_tmax <= root){
+        if(!surrounds(ray_t,root)){
             return false;
         }
     }
@@ -96,14 +155,14 @@ bool hit_sphere(const Sphere s, const float ray_tmin, const float ray_tmax, cons
 // ------------ Scene functions --------------
 // Calculates the hit record for the ray
 // ray_tmin and ray_tmax to be investigated
-bool hit_scene(const Ray r, const float ray_tmin, const float ray_tmax, inout Hit rec){
+bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
     Hit temp_rec;
     bool hit_anything = false;
-    float closest_so_far = ray_tmax;
+    float closest_so_far = ray_t.maxV;
 
     // For every sphere in the scene
     for(int i = 0; i< spheres.length(); i++){
-        if(hit_sphere(spheres[i],ray_tmin,ray_tmax,r,temp_rec)){
+        if(hit_sphere(spheres[i],ray_t,r,temp_rec)){
             hit_anything = true;
             if(closest_so_far > temp_rec.t){
                 closest_so_far = temp_rec.t;
@@ -118,8 +177,9 @@ bool hit_scene(const Ray r, const float ray_tmin, const float ray_tmax, inout Hi
 // Calculates the color of the ray by tracing it with the scene
 vec4 ray_color(Ray r){
     Hit h;
-    if(hit_scene(r,0,100,h)){
-        return vec4(h.normal.z + vec3(1.0,1.0,1.0)* 0.5,1.0);
+    if(hit_scene(r,Interval(0,pInf),h)){
+        if(!h.frontFace) return vec4(1.0,1.0,1.0,1.0);
+        return vec4((h.normal + vec3(1.0,1.0,1.0))* 0.5,1.0);
     }
 
     vec3 dir_unit = normalize(r.dir);
@@ -127,18 +187,11 @@ vec4 ray_color(Ray r){
     return (1.0-a)*vec4(0.286, 0.365, 0.631, 1.0) + a*vec4(1.0, 1.0, 1.0, 1.0);
 }
 
+Ray get_ray(){
+    vec2 pixelCoordsOffset = pixelCoords + sample_square();
 
-
-void main() {
-    // Enviroment variables
-    ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 imageSize = imageSize(outputImage);
-    float aspectRatio = float(imageSize.x)/float(imageSize.y);
-
-    // Pixel coordinates to ray direction
-
-    float ndcX = 2.0 * pixelCoords.x / imageSize.x - 1.0;
-    float ndcY = 1.0 - 2.0 * pixelCoords.y / imageSize.y;
+    float ndcX = 2.0 * pixelCoordsOffset.x / imageSize.x - 1.0;
+    float ndcY = 1.0 - 2.0 * pixelCoordsOffset.y / imageSize.y;
 
     vec3 rayDirCameraSpace = normalize(vec3(
         ndcX * aspectRatio * ubo.camera.tanHalfFOV,
@@ -153,9 +206,36 @@ void main() {
     ray.orig = ubo.camera.position;
     ray.dir = rayDir;
 
+    return ray;
+}
+
+
+
+void main() {
+    // RNG seed, will change after each generation of number
+    // Deterministic based on camera pos and dir
+    // Probably good enough ... I think
+    seed = hash(floatBitsToUint(ubo.camera.view[0][0])) 
+          ^ hash(floatBitsToUint(ubo.camera.view[1][1])) 
+          ^ hash(floatBitsToUint(ubo.camera.view[2][2])) 
+          ^ hash(floatBitsToUint(ubo.camera.view[0][1])) 
+          ^ hash(floatBitsToUint(ubo.camera.view[0][2])) 
+          ^ hash(uint(pixelCoords.x + pixelCoords.y * 1920));
+
+    
+
+    vec4 color = vec4(0.0,0.0,0.0,0.0);
+    Ray ray;
+
+    for(int i = 0; i < rays_per_pixel; i++){
+        ray = get_ray();
+        color += ray_color(ray);
+    }
+
     // Calculate color of pixel
-    vec4 color = ray_color(ray);
-    color.w = 1.0; // Solid, no transparency
+    color = color/rays_per_pixel;
+    //color = normalize(vec4(random(),random(),random(),0.0)); // Visual rng test
+    color.w = 1.0; // Solid, no transparency... yet 
     
     // Store color
     imageStore(outputImage, pixelCoords, color.zyxw);
