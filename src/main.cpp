@@ -65,7 +65,7 @@ const float rollSpeed = 80.0;
 const float shiftMult = 2.5;
 
 // Camera view parameters
-const float fov = 45.0f; 
+const float fov = 50.0f; 
 const float nearClip = 0.1f; 
 const float farClip = 100.0f; 
 
@@ -136,6 +136,8 @@ private:
     struct UniformBufferObject
     {
         Camera camera;
+        float time;
+        uint32_t frameCount;
     };
 
     // -------------------------------------------------------------------------
@@ -205,7 +207,7 @@ private:
     Scene scene;
 
     // FPS counter variables
-    double lastTime = glfwGetTime();
+    float lastFrame;
     int frameCount = 0;
 
     // Mouse controls variables
@@ -229,7 +231,7 @@ private:
     // ---------------- Main loop ------------------------------------
     void mainLoop()
     {
-        float deltaTime, lastFrame;
+        float deltaTime;
         while (!glfwWindowShouldClose(window))
         {
             float currentFrame = glfwGetTime();
@@ -326,7 +328,7 @@ private:
     // Keyboard controller
     void processInput(GLFWwindow* window, float deltaTime) {
         if(!mouseCaptured) return;
-        
+
         float moveSpeedDelta = moveSpeed * deltaTime;
         float rollSpeedDelta = rollSpeed * deltaTime;
         
@@ -1113,7 +1115,7 @@ private:
             array<VkDescriptorSet,2> descriptorSets= {descriptorSetsPerFrame[currentFrame],descriptorSetGlobal};
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptorSets.data(), 0, 0);
 
-            vkCmdDispatch(commandBuffer, (swapChainExtent.width + 15) / 16, (swapChainExtent.height + 15) / 16, 1);
+            vkCmdDispatch(commandBuffer, (swapChainExtent.width + 31) / 32, (swapChainExtent.height + 31) / 32, 1);
 
             VkImageMemoryBarrier startBarriers[2]{};
             startBarriers[0] = createMemoryBarrier(outputImage,
@@ -1334,7 +1336,10 @@ private:
         ubo.camera.position = cameraPos;
 
         ubo.camera.tanHalfFOV = tan(glm::radians(fov) / 2.0);
+
+        ubo.time = lastFrame;
         
+        ubo.frameCount = frameCount;
 
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
@@ -1846,6 +1851,7 @@ private:
 
     // Puts on screen the current fps
     void showFPS() {
+        static double lastTime = glfwGetTime();
         double currentTime = glfwGetTime();
         double delta = currentTime - lastTime;
         frameCount++;

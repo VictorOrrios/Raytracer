@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_float64 : enable
 
 // ------------ Struct definitions --------------
 struct Camera{
@@ -10,6 +11,7 @@ struct Camera{
     vec3 position;
     float tanHalfFOV;
 };
+
 
 struct Ray{
     vec3 orig;
@@ -34,16 +36,21 @@ struct Hit{
 };
 
 // ------------ Constant definitions --------------
-const int rays_per_pixel = 100;
+const int rays_per_pixel = 20;
+const int max_bounces = 5;
 
-const float pInf = 1.0 / 0.0;
-const float nInf = -1.0 / 0.0;
-const Interval empty_interval = Interval(pInf, nInf);
-const Interval universe_interval = Interval(nInf, pInf);
+
+const float PINF = 1.0 / 0.0;
+const float NINF = -1.0 / 0.0;
+const float PI = 3.14159265359;
+const Interval empty_interval = Interval(PINF, NINF);
+const Interval universe_interval = Interval(NINF, PINF);
 
 // ------------ External memory layout --------------
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     Camera camera;
+    float time;
+    uint frameCount;
 } ubo;
 
 layout(set = 1, binding = 0, rgba8) uniform writeonly image2D outputImage;
@@ -53,7 +60,7 @@ layout(set = 1, std140, binding = 1) buffer ParticleSSBOOut {
 };
 
 // ------------ Workgroup sizes --------------
-layout(local_size_x = 16, local_size_y = 16) in;
+layout(local_size_x = 32, local_size_y = 32) in;
 
 // Global variables
 ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
@@ -81,8 +88,40 @@ uint xorshift(inout uint state) {
     return state;
 }
 
-float random() {
+float random(){
     return float(xorshift(seed)) / 4294967295.0; // Dividir por 2^32 - 1
+}
+
+float random_bound(float minV, float maxV){
+    return minV + (maxV-minV)*random();
+}
+
+vec3 randomVec(){
+    return vec3(random(),random(),random());
+}
+
+vec3 random_vec_bound(float minV, float maxV){
+    return vec3(random_bound(minV,maxV),random_bound(minV,maxV),random_bound(minV,maxV));
+}
+
+vec3 random_unit_vec(){
+    float phi = 2.0 * PI * random();
+    float theta = acos(2.0 * random() - 1.0);
+    float sin_theta = sin(theta);
+    return vec3(
+        sin_theta * cos(phi),
+        sin_theta * sin(phi),
+        cos(theta)
+    );
+}
+
+vec3 random_vec_on_hemisphere(vec3 normal){
+    vec3 rvec = random_unit_vec();
+    if(dot(rvec,normal) > 0.0){
+        return rvec;
+    }else{
+        return -rvec;
+    }
 }
 
 vec2 sample_square(){
@@ -103,7 +142,7 @@ bool contains(Interval i, float x){
 bool surrounds(Interval i, float x){
     return i.minV < x && i.maxV > x;
 }
-float clamp(Interval i, float x){
+float clamp_interval(Interval i, float x){
     if(x < i.minV) return i.minV; 
     if(x > i.maxV) return i.maxV;
     return x;
@@ -176,17 +215,29 @@ bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
 
 // Calculates the color of the ray by tracing it with the scene
 vec4 ray_color(Ray r){
-    Hit h;
-    if(hit_scene(r,Interval(0,pInf),h)){
-        if(!h.frontFace) return vec4(1.0,1.0,1.0,1.0);
-        return vec4((h.normal + vec3(1.0,1.0,1.0))* 0.5,1.0);
-    }
+    vec4 accumulated_color = vec4(1.0); 
+    Ray current_ray = r;
+    
+    for (int bounce = 0; bounce < max_bounces; bounce++) {
+        Hit h;
+        if (hit_scene(current_ray, Interval(0.01, PINF), h)) {
+            //return 0.5 * (vec4(h.normal,0.0)+vec4(1.0)); // Normal vector colors
 
-    vec3 dir_unit = normalize(r.dir);
-    float a = 0.5*(dir_unit.y + 1.0);
-    return (1.0-a)*vec4(0.286, 0.365, 0.631, 1.0) + a*vec4(1.0, 1.0, 1.0, 1.0);
+            vec3 bounce_dir = random_vec_on_hemisphere(h.normal);
+            current_ray = Ray(h.p, bounce_dir);
+            accumulated_color *= 0.5;
+        } else {
+            break;
+        }
+    }
+    
+    vec3 dir_unit = normalize(current_ray.dir);
+    float a = 0.5 * (dir_unit.y + 1.0);
+    vec4 bg_color = (1.0 - a) * vec4(0.286, 0.365, 0.631, 1.0) + a * vec4(1.0, 1.0, 1.0, 1.0);
+    return accumulated_color * bg_color;
 }
 
+// Generates a ray pointing to the pixel this thread is assign with a random half-pixel (square) offset
 Ray get_ray(){
     vec2 pixelCoordsOffset = pixelCoords + sample_square();
 
@@ -201,7 +252,6 @@ Ray get_ray(){
 
     vec3 rayDir = normalize(vec3(ubo.camera.viewInv * vec4(rayDirCameraSpace, 0.0)));
 
-    // Ray of the pixel asigned
     Ray ray;
     ray.orig = ubo.camera.position;
     ray.dir = rayDir;
@@ -215,12 +265,15 @@ void main() {
     // RNG seed, will change after each generation of number
     // Deterministic based on camera pos and dir
     // Probably good enough ... I think
-    seed = hash(floatBitsToUint(ubo.camera.view[0][0])) 
+    seed = hash(uint(ubo.time)*1920) 
+            ^ hash(ubo.frameCount)
+            ^ hash(uint(pixelCoords.x + pixelCoords.y * 1920));
+    /*hash(floatBitsToUint(ubo.camera.view[0][0])) 
           ^ hash(floatBitsToUint(ubo.camera.view[1][1])) 
           ^ hash(floatBitsToUint(ubo.camera.view[2][2])) 
           ^ hash(floatBitsToUint(ubo.camera.view[0][1])) 
           ^ hash(floatBitsToUint(ubo.camera.view[0][2])) 
-          ^ hash(uint(pixelCoords.x + pixelCoords.y * 1920));
+    */
 
     
 
