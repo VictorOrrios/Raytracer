@@ -59,13 +59,14 @@ const vector<const char *> deviceExtensions = {
 const glm::vec4 worldFront = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
 const glm::vec4 worldUp    = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
 
-// Camera control speeds
+// Camera control constants
 const float moveSpeed = 1.0;
 const float rollSpeed = 80.0;
 const float shiftMult = 2.5;
+const float fovIncreaseAmount = 1.0;
 
 // Camera view parameters
-const float fov = 50.0f; 
+const float fovInitial = 50.0f; 
 const float nearClip = 0.1f; 
 const float farClip = 100.0f; 
 
@@ -215,6 +216,7 @@ private:
     bool firstMouse = true;
 
     // Camera variables
+    float fov = fovInitial;
     glm::vec3 cameraPos = cameraPositionInitial;
     glm::vec3 cameraFront = cameraFrontInitial;
     glm::vec3 cameraUp = cameraUpInitial;
@@ -322,6 +324,7 @@ private:
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         glfwSetCursorPosCallback(window, mouse_callback_static);
         glfwSetMouseButtonCallback(window, focus_callback_static);
+        glfwSetScrollCallback(window, mouse_scroll_callback_static);
     }
 
     // ---------------- GLFW input handling ------------------------------------
@@ -377,6 +380,7 @@ private:
             pitch = pitchInitial;
             yaw = yawInitial;
             cameraPos = cameraPositionInitial;
+            fov = fovInitial;
             rotateMatrix = true;
         }
 
@@ -438,6 +442,13 @@ private:
 
         updateCamera();
     }
+
+    void mouse_scroll_callback(double xoffset, double yoffset) {
+        fov -= static_cast<float>(yoffset)*fovIncreaseAmount;
+        if(fov < 1.0) fov = 1.0;
+        if(fov > 160.0) fov = 160.0;
+    }
+
 
     // Updates rotation matrix and camera front and up
     void updateCamera(){
@@ -1884,6 +1895,11 @@ private:
     static void mouse_callback_static(GLFWwindow* window, double xpos, double ypos){
         RaytracingApp* app = static_cast<RaytracingApp*>(glfwGetWindowUserPointer(window));
         app->mouse_callback(xpos,ypos);
+    }
+
+    static void mouse_scroll_callback_static(GLFWwindow* window, double xoffset, double yoffset) {
+        RaytracingApp* app = static_cast<RaytracingApp*>(glfwGetWindowUserPointer(window));
+        app->mouse_scroll_callback(xoffset,yoffset);
     }
 
 };
