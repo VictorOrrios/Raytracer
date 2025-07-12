@@ -26,6 +26,13 @@
 
 using namespace std;
 
+// Enable validation layers only when DEBUG is defined.
+#ifdef DEBUG
+    const bool enableValidationLayers = true;
+#else
+    const bool enableValidationLayers = false;
+#endif
+
 
 // -----------------------------------------------------------------------------
 //  Constants & global-scope helpers
@@ -33,68 +40,47 @@ using namespace std;
 // Initial window size
 const uint32_t WIDTH = 1920;
 const uint32_t HEIGHT = 1080;
+
 // Number of frames in the swapchain
 const int MAX_FRAMES_IN_FLIGHT = 2;
+
 // .spirv directory location
 const string SPV_DIR = "bin/shaders/";
+
 // Validation layer names to activate if DEBUG flag is defined
 const vector<const char *> validationLayers = {
     "VK_LAYER_KHRONOS_validation"};
+
 // Extensions requiered to have
 const vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-// FPS counter variables
-double lastTime = glfwGetTime();
-int frameCount = 0;
 
-const bool planeMode = false;
-    
-// Enable validation layers only when DEBUG is defined.
-#ifdef DEBUG
-const bool enableValidationLayers = true;
-#else
-const bool enableValidationLayers = false;
-#endif
-
-
-struct Camera{
-    glm::mat4 view;
-    glm::mat4 viewInv;
-    glm::mat4 proj;
-    glm::mat4 projInv;
-    glm::mat4 viewproj;
-    glm::vec3 position;
-    float tanHalfFOV;
-};
-
-struct UniformBufferObject
-{
-    Camera camera;
-};
-
-
-float speed = 1.0;
-
-glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f, 0.0f);
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
-glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
-
+// World vetors
 const glm::vec4 worldFront = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
 const glm::vec4 worldUp    = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
 
-float yaw   = 0.0f;
-float pitch = 0.0f;
-float roll = 0.0f;
-glm::mat4 rotation = glm::yawPitchRoll(
-    glm::radians(yaw),
-    glm::radians(pitch),
-    glm::radians(roll)
-);
+// Camera control speeds
+const float moveSpeed = 1.0;
+const float rollSpeed = 80.0;
+const float shiftMult = 2.5;
 
-bool mouseCaptured = true;
-static bool firstMouse = true;
+// Camera view parameters
+const float fov = 45.0f; 
+const float nearClip = 0.1f; 
+const float farClip = 100.0f; 
 
-Scene scene;
+// Initial parameters for the camera
+const glm::vec3 cameraPositionInitial = glm::vec3(0.0f, 0.0f, 0.0f);
+const glm::vec3 cameraFrontInitial = worldFront;
+const glm::vec3 cameraUpInitial = worldUp;
+const float yawInitial = 0.0f;
+const float pitchInitial = 0.0f;
+const float rollInitial = 0.0f;
+
+// If true disables keyboard movement and aplies constant forward velocity
+// Turn the controls from 6 degrees of movement to the controls of a plane
+const bool planeMode = false;
+
 
 
 // -----------------------------------------------------------------------------
@@ -103,6 +89,7 @@ Scene scene;
 class RaytracingApp
 {
 public:
+    // Initializes and runs the raytracing window
     void run()
     {
         initWindow();
@@ -112,6 +99,44 @@ public:
     }
 
 private:
+
+    // -------------------------------------------------------------------------
+    //  Struct definitions
+    // -------------------------------------------------------------------------
+    // Holds the index of the queue family that supports graphics commands
+    struct QueueFamilyIndices
+    {
+        optional<uint32_t> graphicsAndComputeFamily;
+        optional<uint32_t> presentFamily;
+
+        bool isComplete() const { return graphicsAndComputeFamily.has_value(); }
+    };
+
+    // Swapchain info holder
+    struct SwapChainSupportDetails
+    {
+        VkSurfaceCapabilitiesKHR capabilities;
+        vector<VkSurfaceFormatKHR> formats;
+        vector<VkPresentModeKHR> presentModes;
+    };    
+
+    // All the info about the camera in each frame
+    struct Camera{
+        glm::mat4 view;
+        glm::mat4 viewInv;
+        glm::mat4 proj;
+        glm::mat4 projInv;
+        glm::mat4 viewproj;
+        glm::vec3 position;
+        float tanHalfFOV;
+    };
+
+    // Info to pass with the uniform buffer each frame
+    struct UniformBufferObject
+    {
+        Camera camera;
+    };
+
     // -------------------------------------------------------------------------
     //  Member variables
     // -------------------------------------------------------------------------
@@ -175,24 +200,31 @@ private:
     vector<VkSemaphore> renderFinishedSemaphores;
     vector<VkFence> inFlightFences;
 
+    // Scene where all the objects reside
+    Scene scene;
 
-    // Holds the index of the queue family that supports graphics commands
-    struct QueueFamilyIndices
-    {
-        optional<uint32_t> graphicsAndComputeFamily;
-        optional<uint32_t> presentFamily;
+    // FPS counter variables
+    double lastTime = glfwGetTime();
+    int frameCount = 0;
 
-        bool isComplete() const { return graphicsAndComputeFamily.has_value(); }
-    };
+    // Mouse controls variables
+    bool mouseCaptured = true;
+    bool firstMouse = true;
 
-    // Swapchain info holder
-    struct SwapChainSupportDetails
-    {
-        VkSurfaceCapabilitiesKHR capabilities;
-        vector<VkSurfaceFormatKHR> formats;
-        vector<VkPresentModeKHR> presentModes;
-    };    
+    // Camera variables
+    glm::vec3 cameraPos = cameraPositionInitial;
+    glm::vec3 cameraFront = cameraFrontInitial;
+    glm::vec3 cameraUp = cameraUpInitial;
+    float yaw = yawInitial;
+    float pitch = pitchInitial;
+    float roll = rollInitial;
+    glm::mat4 rotation = glm::yawPitchRoll(
+                            glm::radians(yaw),
+                            glm::radians(pitch),
+                            glm::radians(roll)
+                        );
 
+    
     // ---------------- Main loop ------------------------------------
     void mainLoop()
     {
@@ -285,42 +317,38 @@ private:
         glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        glfwSetCursorPosCallback(window, mouse_callback);
-        glfwSetMouseButtonCallback(window, focus_callback);
+        glfwSetCursorPosCallback(window, mouse_callback_static);
+        glfwSetMouseButtonCallback(window, focus_callback_static);
     }
 
-    static void framebufferResizeCallback(GLFWwindow *window, int width, int height)
-    {
-        auto app = reinterpret_cast<RaytracingApp *>(glfwGetWindowUserPointer(window));
-        app->framebufferResized = true;
-    }
-
+    // ---------------- GLFW input handling ------------------------------------
+    // Keyboard controller
     void processInput(GLFWwindow* window, float deltaTime) {
-        float cameraSpeed = speed * deltaTime;
-        float rollSpeed = 80.0 * deltaTime;
-        float shiftMult = 2.5;
+        float moveSpeedDelta = moveSpeed * deltaTime;
+        float rollSpeedDelta = rollSpeed * deltaTime;
+        
         bool rotateMatrix = false;
 
         if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
-            cameraSpeed *= shiftMult;
-            rollSpeed *= shiftMult;
+            moveSpeedDelta *= shiftMult;
+            rollSpeedDelta *= shiftMult;
         }
 
         if(planeMode){
-            cameraPos += cameraSpeed * cameraFront;
+            cameraPos += moveSpeedDelta * cameraFront;
         }else{
             if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-                cameraPos += cameraSpeed * cameraFront;
+                cameraPos += moveSpeedDelta * cameraFront;
             if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-                cameraPos -= cameraSpeed * cameraFront;
+                cameraPos -= moveSpeedDelta * cameraFront;
             if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-                cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+                cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * moveSpeedDelta;
             if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-                cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+                cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * moveSpeedDelta;
             if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-                cameraPos += cameraSpeed * glm::vec3(worldUp);
+                cameraPos += moveSpeedDelta * cameraUp;
             if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-                cameraPos -= cameraSpeed * glm::vec3(worldUp);
+                cameraPos -= moveSpeedDelta * cameraUp;
         }
 
 
@@ -328,11 +356,11 @@ private:
             glfwSetWindowShouldClose(window,true);
         
         if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS){
-            roll -= rollSpeed;
+            roll -= rollSpeedDelta;
             rotateMatrix = true;
         }
         if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS){
-            roll += rollSpeed;
+            roll += rollSpeedDelta;
             rotateMatrix = true;
         }
         if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS){
@@ -365,7 +393,8 @@ private:
         }
     }
 
-    static void focus_callback(GLFWwindow* window, int button, int action, int mods){
+    // Window focus controller
+    void focus_callback(int button, int action, int mods){
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && !mouseCaptured) {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // capturar cursor
             mouseCaptured = true;
@@ -373,8 +402,8 @@ private:
         }
     }
 
-
-    static void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+    // Mouse controller
+    void mouse_callback(double xpos, double ypos) {
         
         static float lastX = 800.0f / 2.0f;
         static float lastY = 600.0f / 2.0f;
@@ -1300,10 +1329,9 @@ private:
 
         ubo.camera.viewInv = glm::inverse(ubo.camera.view); 
 
-        float fov = 45.0f; 
+        
         float aspectRatio = swapChainExtent.width/swapChainExtent.height;
-        float nearClip = 0.1f; 
-        float farClip = 100.0f; 
+        
 
         ubo.camera.proj = glm::perspective(
             glm::radians(fov), 
@@ -1848,6 +1876,24 @@ private:
             frameCount = 0;
             lastTime = currentTime;
         }
+    }
+
+    // ---------------- Static callbacks ------------------------------------------------
+
+    static void framebufferResizeCallback(GLFWwindow *window, int width, int height)
+    {
+        auto app = reinterpret_cast<RaytracingApp *>(glfwGetWindowUserPointer(window));
+        app->framebufferResized = true;
+    }
+
+    static void focus_callback_static(GLFWwindow* window, int button, int action, int mods){
+        RaytracingApp* app = static_cast<RaytracingApp*>(glfwGetWindowUserPointer(window));
+        app->focus_callback(button,action,mods);
+    }
+
+    static void mouse_callback_static(GLFWwindow* window, double xpos, double ypos){
+        RaytracingApp* app = static_cast<RaytracingApp*>(glfwGetWindowUserPointer(window));
+        app->mouse_callback(xpos,ypos);
     }
 
 };
