@@ -2,8 +2,9 @@
 #include <vector>
 
 enum MaterialsFunctions{
-    LAMBERTIAN = 1,
-    METAL = 2
+    LAMBERTIAN = 1, // aux1 = unused
+    METAL = 2, // aux1 = fuzziness
+    DIFFUSE = 3, // aux1 = unused
 };
 
 struct alignas(16) Sphere{
@@ -14,7 +15,7 @@ struct alignas(16) Sphere{
 
 struct alignas(16) Material{
     glm::vec3 albedo;
-    float reflectance;
+    float aux1;
     int function;
 };
 

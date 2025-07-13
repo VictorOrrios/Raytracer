@@ -1,36 +1,60 @@
 #include "scene.hpp"
+#include <random>
+#include <iostream>
+
+int randomInt(int min, int max) {
+    static std::random_device rd;  
+    static std::mt19937 gen(rd());
+    
+    std::uniform_int_distribution<int> distrib(min, max);
+    return distrib(gen);
+}
+
+float randomFloat(float min, float max) {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    
+    std::uniform_real_distribution<float> distrib(min, max);
+    return distrib(gen);
+}
 
 
 Scene::Scene(){
 
     int ground = addMaterial({
         albedo: glm::vec3(0.129, 0.388, 0.082),
-        reflectance: 0.5,
+        aux1: 0.5,
         function: LAMBERTIAN
     });
 
     int blueMatte = addMaterial({
         albedo: glm::vec3(0.208, 0.612, 0.8),
-        reflectance: 0.5,
+        aux1: 0.5,
         function: LAMBERTIAN
     });
 
     int redMetal = addMaterial({
         albedo: glm::vec3(0.82, 0.118, 0.118),
-        reflectance: 0.5,
+        aux1: 0.8,
         function: METAL
     });
 
     int yellowMetal = addMaterial({
         albedo: glm::vec3(0.945, 0.949, 0.212),
-        reflectance: 0.5,
+        aux1: 0.1,
         function: METAL
     });
 
     int whiteMetal = addMaterial({
         albedo: glm::vec3(1.0, 1.0, 1.0),
-        reflectance: 0.5,
+        aux1: 0.0,
         function: METAL
+    });
+
+    int blueDiffuse = addMaterial({
+        albedo: glm::vec3(0.208, 0.612, 0.8),
+        aux1: 0.0,
+        function: DIFFUSE
     });
 
     addSphere({
@@ -68,6 +92,17 @@ Scene::Scene(){
         r: 1.0,
         mat: yellowMetal
     });
+
+    /*
+    const float randomRange = 10.0; 
+    for(int i = 0; i < 500; i++){
+        addSphere({
+            pos: glm::vec3(randomFloat(-randomRange,randomRange),randomFloat(-randomRange,randomRange),randomFloat(-randomRange,randomRange)),
+            r: randomFloat(0.1,2.0),
+            mat: randomInt(0,materialVec.size()-1)
+        });
+    }
+    */
 
 }
 

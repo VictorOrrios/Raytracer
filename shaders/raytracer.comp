@@ -6,6 +6,7 @@
 
 #define LAMBERTIAN 1
 #define METAL      2
+#define DIFFUSE    3
 
 // ------------ Struct definitions --------------
 struct Camera{
@@ -30,7 +31,7 @@ struct Interval{
 
 struct Material{
     vec3 albedo;
-    float reflectance;
+    float aux1;
     int function;
 };
 
@@ -220,21 +221,30 @@ bool scatter_lambertian(const Hit rec, out vec4 attenuation, in Ray ray_in, out 
     //if(near_zero(bounce_dir)) bounce_dir = rec.normal;
     scattered = Ray(rec.p, bounce_dir);
     attenuation = vec4(materials[rec.mat].albedo,1.0);
-    //attenuation = vec4(0.0,1.0,1.0,1.0);
     return true;
 }
 
+// aux1 = fuzzines
 bool scatter_metal(const Hit rec, out vec4 attenuation, in Ray ray_in,out Ray scattered){
-    vec3 reflected = reflect(ray_in.dir,rec.normal);
+    vec3 reflected = reflect(ray_in.dir,rec.normal) + random_unit_vec() * materials[rec.mat].aux1;
     scattered = Ray(rec.p, reflected);
     attenuation = vec4(materials[rec.mat].albedo,1.0);
     return true;
 }
 
+bool scatter_diffuse(const Hit rec, out vec4 attenuation, in Ray ray_in, out Ray scattered){
+    vec3 bounce_dir = random_vec_on_hemisphere(rec.normal);
+    scattered = Ray(rec.p, bounce_dir);
+    attenuation = vec4(materials[rec.mat].albedo,1.0);
+    return true;
+}
+
+// Generic scatter function for materials
 bool scatter(int material, const Hit rec, out vec4 attenuation, in Ray ray_in,out Ray scattered){
     switch(materials[rec.mat].function){
         case LAMBERTIAN: return scatter_lambertian(rec,attenuation,ray_in,scattered);
         case METAL: return scatter_metal(rec,attenuation,ray_in,scattered);
+        case DIFFUSE: return scatter_diffuse(rec,attenuation,ray_in,scattered);
     }
     return false;
 }
@@ -275,8 +285,6 @@ vec4 skybox_color(Ray r){
 vec4 ray_color(Ray r){
     vec4 accumulated_color = vec4(1.0); 
     Ray current_ray = r;
-    //const float reflectance = float(pixelCoords.x)/float(imageSize.x); // Full reflectance gamut
-    const float reflectance = 0.5;
     
     for (int bounce = 0; bounce < max_bounces; bounce++) {
         Hit h;
