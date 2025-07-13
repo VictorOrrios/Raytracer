@@ -5,6 +5,7 @@ enum MaterialsFunctions{
     LAMBERTIAN = 1, // aux1 = unused
     METAL = 2, // aux1 = fuzziness
     DIFFUSE = 3, // aux1 = unused
+    DIELECTRIC = 4, // aux1 = refraction index
 };
 
 struct alignas(16) Sphere{

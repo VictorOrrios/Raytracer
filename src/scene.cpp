@@ -57,6 +57,27 @@ Scene::Scene(){
         function: DIFFUSE
     });
 
+    // Glass
+    int dielectric150 = addMaterial({
+        albedo: glm::vec3(0.0, 0.0, 0.0),
+        aux1: 1.5,
+        function: DIELECTRIC
+    });
+
+    // Hyper refractable
+    int dielectric075 = addMaterial({
+        albedo: glm::vec3(0.0, 0.0, 0.0),
+        aux1: 0.75,
+        function: DIELECTRIC
+    });
+
+    // Water
+    int dielectric133 = addMaterial({
+        albedo: glm::vec3(0.0, 0.0, 0.0),
+        aux1: 1.33,
+        function: DIELECTRIC
+    });
+
     addSphere({
         pos: glm::vec3(0.0,-1000.0,-10.0),
         r: 999.0,
@@ -92,6 +113,31 @@ Scene::Scene(){
         r: 1.0,
         mat: yellowMetal
     });
+
+    addSphere({
+        pos: glm::vec3(0.0,0.01,-7.8),
+        r: 1.0,
+        mat: dielectric150
+    });
+
+    addSphere({
+        pos: glm::vec3(0.0,0.01,-7.8),
+        r: 0.8,
+        mat: dielectric075
+    });
+
+    addSphere({
+        pos: glm::vec3(2.005,0.01,-7.8),
+        r: 1.0,
+        mat: dielectric133
+    });
+
+    addSphere({
+        pos: glm::vec3(-2.005,0.01,-7.8),
+        r: 1.0,
+        mat: dielectric075
+    });
+
 
     /*
     const float randomRange = 10.0; 

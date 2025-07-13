@@ -3,10 +3,12 @@
 
 #define PI 3.14159265359
 #define FLT_MIN 1.175494e-38
+#define AIR_REF_INDEX 1.000293
 
 #define LAMBERTIAN 1
 #define METAL      2
 #define DIFFUSE    3
+#define DIELECTRIC 4
 
 // ------------ Struct definitions --------------
 struct Camera{
@@ -51,7 +53,7 @@ struct Hit{
 
 // ------------ Constant definitions --------------
 const int rays_per_pixel = 20;
-const int max_bounces = 5;
+const int max_bounces = 20;
 
 
 const float PINF = 1.0 / 0.0;
@@ -239,12 +241,46 @@ bool scatter_diffuse(const Hit rec, out vec4 attenuation, in Ray ray_in, out Ray
     return true;
 }
 
+// Fresnel-Schlick aproximation to reflectance
+float reflectance(float cosine, float ref_idx) {
+    float r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
+    r0 = r0 * r0;
+    return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
+}
+
+// aux1 = refraction index
+bool scatter_dielectric(const Hit rec, out vec4 attenuation, in Ray ray_in, out Ray scattered){
+    attenuation = vec4(1.0);
+    float eta = rec.frontFace ? (AIR_REF_INDEX / materials[rec.mat].aux1) 
+                             : (materials[rec.mat].aux1 / AIR_REF_INDEX);
+    
+    vec3 unit_direction = normalize(ray_in.dir);
+    
+    float cos_theta = min(dot(-unit_direction, rec.normal), 1.0);
+    float sin_theta = sqrt(1.0 - cos_theta*cos_theta);
+    
+    bool cannot_refract = eta * sin_theta > 1.0;
+    vec3 direction;
+    
+    if (cannot_refract || reflectance(cos_theta,eta) > random()) {
+        // Reflexión interna total
+        direction = reflect(unit_direction, rec.normal);
+    } else {
+        // Refracción con posible reflexión de Fresnel
+        direction = refract(unit_direction, rec.normal, eta);
+    }
+    
+    scattered = Ray(rec.p, direction);
+    return true;
+}
+
 // Generic scatter function for materials
 bool scatter(int material, const Hit rec, out vec4 attenuation, in Ray ray_in,out Ray scattered){
     switch(materials[rec.mat].function){
         case LAMBERTIAN: return scatter_lambertian(rec,attenuation,ray_in,scattered);
         case METAL: return scatter_metal(rec,attenuation,ray_in,scattered);
         case DIFFUSE: return scatter_diffuse(rec,attenuation,ray_in,scattered);
+        case DIELECTRIC: return scatter_dielectric(rec,attenuation,ray_in,scattered);
     }
     return false;
 }
