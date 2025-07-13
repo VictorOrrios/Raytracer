@@ -22,6 +22,7 @@
 #include <glm/gtx/euler_angles.hpp>
 #include <chrono>
 
+
 #include "scene.hpp"
 
 using namespace std;
@@ -55,6 +56,9 @@ const vector<const char *> validationLayers = {
 const vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
+// Number of shader storage buffers used
+const int numSSBO = 2;
+
 // World vetors
 const glm::vec4 worldFront = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
 const glm::vec4 worldUp    = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
@@ -64,6 +68,7 @@ const float moveSpeed = 1.0;
 const float rollSpeed = 80.0;
 const float shiftMult = 2.5;
 const float fovIncreaseAmount = 1.0;
+const float sensitivityInitial = 0.1;
 
 // Camera view parameters
 const float fovInitial = 50.0f; 
@@ -196,8 +201,8 @@ private:
     VkImageView outputImageView;
 
     // SSBOs
-    VkBuffer shaderStorageBuffer;
-    VkDeviceMemory shaderStorageBufferMemory;
+    vector<VkBuffer> shaderStorageBuffers = vector<VkBuffer>(numSSBO);
+    vector<VkDeviceMemory> shaderStorageBufferMemory = vector<VkDeviceMemory>(numSSBO);
 
     // Sync Objects
     vector<VkSemaphore> imageAvailableSemaphores;
@@ -278,8 +283,11 @@ private:
         vkDestroyImage(device,outputImage, nullptr);
         vkFreeMemory(device, outputImageMemory, nullptr);
 
-        vkDestroyBuffer(device, shaderStorageBuffer, nullptr);
-        vkFreeMemory(device, shaderStorageBufferMemory, nullptr);
+        for (size_t i = 0; i < shaderStorageBuffers.size(); i++)
+        {
+            vkDestroyBuffer(device, shaderStorageBuffers[i], nullptr);
+            vkFreeMemory(device, shaderStorageBufferMemory[i], nullptr);
+        }
 
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
@@ -390,7 +398,9 @@ private:
             updateCamera();
         }
 
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS){
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS){
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             mouseCaptured = false;
         }
@@ -424,7 +434,7 @@ private:
         lastX = xpos;
         lastY = ypos;
 
-        float sensitivity = 0.1f;
+        float sensitivity = sensitivityInitial * fov/fovInitial;
         xoffset *= sensitivity;
         yoffset *= sensitivity;
 
@@ -477,7 +487,8 @@ private:
         createCommandPool();
         createUniformBuffers();
         createImageBuffer(WIDTH,HEIGHT);
-        createShaderStorageBuffer();
+        createShaderStorageBufferSpheres();
+        createShaderStorageBufferMaterials();
         createDescriptorPool();
         createDescriptorSetsPerFrame();
         createDescriptorSetsGlobal();
@@ -1411,9 +1422,23 @@ private:
     }
 
     // ---------------- SSBO creation ------------------------------------------------
-    void createShaderStorageBuffer(){
-        
-        VkDeviceSize bufferSize = sizeof(Sphere) * scene.sphereVec.size();
+    void createShaderStorageBufferSpheres(){
+        createSSBOVector(0,scene.sphereVec);
+    }
+
+    void createShaderStorageBufferMaterials(){
+        createSSBOVector(1,scene.materialVec);
+    }
+
+    template <typename T>
+    void createSSBOVector(int index, vector<T> dataVector){
+
+        if (shaderStorageBuffers[index] != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device, shaderStorageBuffers[index], nullptr);
+            vkFreeMemory(device, shaderStorageBufferMemory[index], nullptr);
+        }
+
+        VkDeviceSize bufferSize = sizeof(T) * dataVector.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -1423,13 +1448,13 @@ private:
 
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-            memcpy(data, scene.sphereVec.data(), (size_t)bufferSize);
+            memcpy(data, dataVector.data(), (size_t)bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageBuffer, shaderStorageBufferMemory);
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageBuffers[index], shaderStorageBufferMemory[index]);
         // Copy data from the staging buffer (host) to the shader storage buffer (GPU)
-        copyBuffer(stagingBuffer, shaderStorageBuffer, bufferSize);
+        copyBuffer(stagingBuffer, shaderStorageBuffers[index], bufferSize);
 
         vkDestroyBuffer(device,stagingBuffer,nullptr);
         vkFreeMemory(device,stagingBufferMemory,nullptr);
@@ -1456,7 +1481,7 @@ private:
             throw runtime_error("failed to create descriptor set layout per frame");
         }
 
-        array<VkDescriptorSetLayoutBinding, 2> layoutBindingsB{};
+        array<VkDescriptorSetLayoutBinding, numSSBO+1> layoutBindingsB{};
 
         layoutBindingsB[0].binding = 0;
         layoutBindingsB[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -1464,15 +1489,17 @@ private:
         layoutBindingsB[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         layoutBindingsB[0].pImmutableSamplers = nullptr;
 
-        layoutBindingsB[1].binding = 1;
-        layoutBindingsB[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        layoutBindingsB[1].descriptorCount = 1;
-        layoutBindingsB[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        layoutBindingsB[1].pImmutableSamplers = nullptr;
+        for(int i = 1; i < 1+numSSBO; i++){
+            layoutBindingsB[i].binding = static_cast<uint32_t>(i);
+            layoutBindingsB[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            layoutBindingsB[i].descriptorCount = 1;
+            layoutBindingsB[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            layoutBindingsB[i].pImmutableSamplers = nullptr;
+        }
 
         VkDescriptorSetLayoutCreateInfo layoutInfoGlobal{};
         layoutInfoGlobal.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfoGlobal.bindingCount = 2;
+        layoutInfoGlobal.bindingCount = static_cast<uint32_t>(layoutBindingsB.size());
         layoutInfoGlobal.pBindings = layoutBindingsB.data();
 
         if (vkCreateDescriptorSetLayout(device, &layoutInfoGlobal, nullptr, &descriptorSetLayoutGlobal) != VK_SUCCESS)
@@ -1484,7 +1511,7 @@ private:
 
     void createDescriptorPool()
     {
-        array<VkDescriptorPoolSize, 2> poolSizes{};
+        array<VkDescriptorPoolSize, 2+numSSBO> poolSizes{};
 
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -1492,14 +1519,16 @@ private:
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         poolSizes[1].descriptorCount = 1;
 
-        poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        poolSizes[2].descriptorCount = 1;
+        for(int i = 2; i < 2+numSSBO; i++){
+            poolSizes[i].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            poolSizes[i].descriptorCount = 1;
+        }
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = 3;
+        poolInfo.poolSizeCount = 2+numSSBO;
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)+2;
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)+1+numSSBO;
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
         {
@@ -1563,12 +1592,19 @@ private:
         imageInfo.imageView = outputImageView;
         imageInfo.sampler = VK_NULL_HANDLE;
 
-        VkDescriptorBufferInfo storageBufferInfo{};
-        storageBufferInfo.buffer = shaderStorageBuffer;
-        storageBufferInfo.offset = 0;
-        storageBufferInfo.range = sizeof(Sphere) * scene.sphereVec.size();
+        vector<VkDescriptorBufferInfo> ssboInfos = vector<VkDescriptorBufferInfo>(numSSBO);
 
-        array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        // Spheres SSBO
+        ssboInfos[0].buffer = shaderStorageBuffers[0];
+        ssboInfos[0].offset = 0;
+        ssboInfos[0].range = sizeof(Sphere) * scene.sphereVec.size();
+
+        // Materials SSBO
+        ssboInfos[1].buffer = shaderStorageBuffers[1];
+        ssboInfos[1].offset = 0;
+        ssboInfos[1].range = sizeof(Material) * scene.materialVec.size();
+
+        array<VkWriteDescriptorSet, 1+numSSBO> descriptorWrites{};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSetGlobal;
@@ -1578,15 +1614,18 @@ private:
         descriptorWrites[0].descriptorCount = 1;
         descriptorWrites[0].pImageInfo = &imageInfo;
 
-        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[1].dstSet = descriptorSetGlobal;
-        descriptorWrites[1].dstBinding = 1;
-        descriptorWrites[1].dstArrayElement = 0;
-        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        descriptorWrites[1].descriptorCount = 1;
-        descriptorWrites[1].pBufferInfo = &storageBufferInfo;
+        for(int i = 1; i < 1+numSSBO; i++){
+            descriptorWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[i].dstSet = descriptorSetGlobal;
+            descriptorWrites[i].dstBinding = i;
+            descriptorWrites[i].dstArrayElement = 0;
+            descriptorWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[i].descriptorCount = 1;
+            descriptorWrites[i].pBufferInfo = &ssboInfos[i-1];
+        }
 
-        vkUpdateDescriptorSets(device, 2, descriptorWrites.data(), 0, nullptr);
+
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
 
     // ---------------- Sync object creation ------------------------------------------------

@@ -1,6 +1,12 @@
 #version 450
 #extension GL_EXT_shader_explicit_arithmetic_types_float64 : enable
 
+#define PI 3.14159265359
+#define FLT_MIN 1.175494e-38
+
+#define LAMBERTIAN 1
+#define METAL      2
+
 // ------------ Struct definitions --------------
 struct Camera{
     mat4 view;
@@ -12,7 +18,6 @@ struct Camera{
     float tanHalfFOV;
 };
 
-
 struct Ray{
     vec3 orig;
     vec3 dir;
@@ -23,14 +28,22 @@ struct Interval{
     float maxV;
 };
 
+struct Material{
+    vec3 albedo;
+    float reflectance;
+    int function;
+};
+
 struct Sphere{
     vec3 pos; // Coordinates of the center
     float r; // Radius
+    int mat; // Material index
 };
 
 struct Hit{
     vec3 p; // Where it happend
     vec3 normal; // The normal where it hit
+    int mat; // Material index of the object it hit
     float t; // The distance from the ray origin to the hit
     bool frontFace; // True if hit is to a front facing surface
 };
@@ -42,7 +55,6 @@ const int max_bounces = 5;
 
 const float PINF = 1.0 / 0.0;
 const float NINF = -1.0 / 0.0;
-const float PI = 3.14159265359;
 const Interval empty_interval = Interval(PINF, NINF);
 const Interval universe_interval = Interval(NINF, PINF);
 
@@ -55,8 +67,12 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 
 layout(set = 1, binding = 0, rgba8) uniform writeonly image2D outputImage;
 
-layout(set = 1, std140, binding = 1) buffer ParticleSSBOOut {
+layout(set = 1, std430, binding = 1) buffer SpheresSSBOOut {
     Sphere spheres[];
+};
+
+layout(set = 1, std430, binding = 2) buffer MaterialsSSBOOut {
+    Material materials[];
 };
 
 // ------------ Workgroup sizes --------------
@@ -128,12 +144,18 @@ vec2 sample_square(){
     return vec2(random()-0.5,random()-0.5);
 }
 
+// ------------ vec3 functions --------------
+bool near_zero(const vec3 v){
+    return (FLT_MIN > v.x) && (FLT_MIN > v.y) && (FLT_MIN > v.z);
+}
+
 
 // ------------ Ray functions --------------
 // Having the length of a hit (t) returns the point where it hit
 vec3 at(const Ray r, const float t){
     return r.orig + t*r.dir;
 }
+
 
 // ------------ Interval functions --------------
 bool contains(Interval i, float x){
@@ -185,11 +207,40 @@ bool hit_sphere(const Sphere s, const Interval ray_t, const Ray r, out Hit rec){
 
     rec.t = root;
     rec.p = at(r,root);
+    rec.mat = s.mat;
     vec3 outward_normal = (rec.p - s.pos) / s.r;
     set_face_normal(rec, r, outward_normal);
 
     return true;
 }
+
+// ------------ Material functions --------------
+bool scatter_lambertian(const Hit rec, out vec4 attenuation, in Ray ray_in, out Ray scattered){
+    vec3 bounce_dir = rec.normal + random_vec_on_hemisphere(rec.normal);
+    //if(near_zero(bounce_dir)) bounce_dir = rec.normal;
+    scattered = Ray(rec.p, bounce_dir);
+    attenuation = vec4(materials[rec.mat].albedo,1.0);
+    //attenuation = vec4(0.0,1.0,1.0,1.0);
+    return true;
+}
+
+bool scatter_metal(const Hit rec, out vec4 attenuation, in Ray ray_in,out Ray scattered){
+    vec3 reflected = reflect(ray_in.dir,rec.normal);
+    scattered = Ray(rec.p, reflected);
+    attenuation = vec4(materials[rec.mat].albedo,1.0);
+    return true;
+}
+
+bool scatter(int material, const Hit rec, out vec4 attenuation, in Ray ray_in,out Ray scattered){
+    switch(materials[rec.mat].function){
+        case LAMBERTIAN: return scatter_lambertian(rec,attenuation,ray_in,scattered);
+        case METAL: return scatter_metal(rec,attenuation,ray_in,scattered);
+    }
+    return false;
+}
+
+
+
 
 // ------------ Scene functions --------------
 // Calculates the hit record for the ray
@@ -213,28 +264,40 @@ bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
     return hit_anything;
 }
 
+// Color of the skybox where the ray is pointing to
+vec4 skybox_color(Ray r){
+    vec3 dir_unit = normalize(r.dir);
+    float a = 0.5 * (dir_unit.y + 1.0);
+    return (1.0 - a) * vec4(1.0, 1.0, 1.0, 1.0) + a * vec4(0.286, 0.365, 0.631, 1.0);
+}
+
 // Calculates the color of the ray by tracing it with the scene
 vec4 ray_color(Ray r){
     vec4 accumulated_color = vec4(1.0); 
     Ray current_ray = r;
+    //const float reflectance = float(pixelCoords.x)/float(imageSize.x); // Full reflectance gamut
+    const float reflectance = 0.5;
     
     for (int bounce = 0; bounce < max_bounces; bounce++) {
         Hit h;
-        if (hit_scene(current_ray, Interval(0.01, PINF), h)) {
+        if (hit_scene(current_ray, Interval(0.005, PINF), h)) {
             //return 0.5 * (vec4(h.normal,0.0)+vec4(1.0)); // Normal vector colors
-
-            vec3 bounce_dir = random_vec_on_hemisphere(h.normal);
-            current_ray = Ray(h.p, bounce_dir);
-            accumulated_color *= 0.5;
+            Ray scattered;
+            vec4 attenuation;
+            if(scatter(h.mat,h,attenuation,current_ray,scattered)){
+                current_ray = scattered;
+                accumulated_color *= attenuation;
+            }else{
+                // Material not found color
+                return vec4(0.984, 0.224, 1.0, 1.0);
+            }
+            
         } else {
-            break;
+            return accumulated_color * skybox_color(r);
         }
     }
     
-    vec3 dir_unit = normalize(current_ray.dir);
-    float a = 0.5 * (dir_unit.y + 1.0);
-    vec4 bg_color = (1.0 - a) * vec4(0.286, 0.365, 0.631, 1.0) + a * vec4(1.0, 1.0, 1.0, 1.0);
-    return accumulated_color * bg_color;
+    return vec4(0.0);
 }
 
 // Generates a ray pointing to the pixel this thread is assign with a random half-pixel (square) offset
@@ -262,9 +325,8 @@ Ray get_ray(){
 
 
 void main() {
+
     // RNG seed, will change after each generation of number
-    // Deterministic based on camera pos and dir
-    // Probably good enough ... I think
     seed = hash(uint(ubo.time)*1920) 
             ^ hash(ubo.frameCount)
             ^ hash(uint(pixelCoords.x + pixelCoords.y * 1920));
@@ -275,9 +337,7 @@ void main() {
           ^ hash(floatBitsToUint(ubo.camera.view[0][2])) 
     */
 
-    
-
-    vec4 color = vec4(0.0,0.0,0.0,0.0);
+    vec4 color = vec4(0.0);
     Ray ray;
 
     for(int i = 0; i < rays_per_pixel; i++){
@@ -288,7 +348,7 @@ void main() {
     // Calculate color of pixel
     color = color/rays_per_pixel;
     //color = normalize(vec4(random(),random(),random(),0.0)); // Visual rng test
-    color.w = 1.0; // Solid, no transparency... yet 
+    color = vec4(pow(color.xyz, vec3(1.0/2.2)), 1.0);
     
     // Store color
     imageStore(outputImage, pixelCoords, color.zyxw);
