@@ -5,10 +5,12 @@
 #define FLT_MIN 1.175494e-38
 #define AIR_REF_INDEX 1.000293
 
-#define LAMBERTIAN 1
-#define METAL      2
-#define DIFFUSE    3
-#define DIELECTRIC 4
+#define DIFFUSE         1
+#define METAL           2
+#define TRANSMISSIVE    3
+#define SUBSURFACE      4
+#define EMITER          5
+
 
 // ------------ Struct definitions --------------
 struct Camera{
@@ -32,9 +34,14 @@ struct Interval{
 };
 
 struct Material{
-    vec3 albedo;
-    float aux1;
-    int function;
+    vec4 albedo; // Base color rgb
+    vec4 emission_color; // Rgb color of emited light, 0.0 for non emited
+    vec4 transmission_subsurface_color; // Shared rgb color for transmision or subsurface scattering
+    float metalness; // 0.0 = dielectric , 1.0 = metalic
+    float roughness; // 0.0 = smooth , 1.0 = rough
+    float opacity_subsurface_strength; // opacity: 0.0 = transparent, 1.0 = opaque || subsurface strength: intensity of dispersion
+    float ior; // Index of refraction
+    int type; // Flag to know what type of material is this
 };
 
 struct Sphere{
@@ -218,8 +225,9 @@ bool hit_sphere(const Sphere s, const Interval ray_t, const Ray r, out Hit rec){
 }
 
 // ------------ Material functions --------------
+/*
 bool scatter_lambertian(const Hit rec, out vec4 attenuation, in Ray ray_in, out Ray scattered){
-    vec3 bounce_dir = rec.normal + random_vec_on_hemisphere(rec.normal);
+    vec3 bounce_dir = normalize(rec.normal + random_vec_on_hemisphere(rec.normal));
     //if(near_zero(bounce_dir)) bounce_dir = rec.normal;
     scattered = Ray(rec.p, bounce_dir);
     attenuation = vec4(materials[rec.mat].albedo,1.0);
@@ -228,7 +236,7 @@ bool scatter_lambertian(const Hit rec, out vec4 attenuation, in Ray ray_in, out 
 
 // aux1 = fuzzines
 bool scatter_metal(const Hit rec, out vec4 attenuation, in Ray ray_in,out Ray scattered){
-    vec3 reflected = reflect(ray_in.dir,rec.normal) + random_unit_vec() * materials[rec.mat].aux1;
+    vec3 reflected = normalize(reflect(ray_in.dir,rec.normal) + random_unit_vec() * materials[rec.mat].aux1);
     scattered = Ray(rec.p, reflected);
     attenuation = vec4(materials[rec.mat].albedo,1.0);
     return true;
@@ -241,12 +249,6 @@ bool scatter_diffuse(const Hit rec, out vec4 attenuation, in Ray ray_in, out Ray
     return true;
 }
 
-// Fresnel-Schlick aproximation to reflectance
-float reflectance(float cosine, float ref_idx) {
-    float r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
-    r0 = r0 * r0;
-    return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
-}
 
 // aux1 = refraction index
 bool scatter_dielectric(const Hit rec, out vec4 attenuation, in Ray ray_in, out Ray scattered){
@@ -274,15 +276,88 @@ bool scatter_dielectric(const Hit rec, out vec4 attenuation, in Ray ray_in, out 
     return true;
 }
 
+bool scatter_specular(const Hit rec, out vec4 attenuation, in Ray ray_in,out Ray scattered){
+    vec3 reflected = normalize(reflect(ray_in.dir,rec.normal)/materials[rec.mat].aux1 + random_unit_vec() * materials[rec.mat].aux1);
+    scattered = Ray(rec.p, reflected);
+    attenuation = vec4(materials[rec.mat].albedo,1.0);
+    return true;
+}
+*/
+
+// Fresnel-Schlick aproximation to reflectance
+float reflectance(float cosine, float ref_idx) {
+    float r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
+    r0 = r0 * r0;
+    return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
+}
+
+
+
 // Generic scatter function for materials
-bool scatter(int material, const Hit rec, out vec4 attenuation, in Ray ray_in,out Ray scattered){
-    switch(materials[rec.mat].function){
-        case LAMBERTIAN: return scatter_lambertian(rec,attenuation,ray_in,scattered);
-        case METAL: return scatter_metal(rec,attenuation,ray_in,scattered);
-        case DIFFUSE: return scatter_diffuse(rec,attenuation,ray_in,scattered);
-        case DIELECTRIC: return scatter_dielectric(rec,attenuation,ray_in,scattered);
+bool scatter(const Hit rec, inout Ray ray, inout vec4 ray_color, inout vec4 incoming_light){
+    Material mat = materials[rec.mat];
+
+    // Light emiter
+    if(mat.type == EMITER){
+        incoming_light += mat.emission_color * ray_color;
+        return false; // No scattering on lights
     }
-    return false;
+
+    vec3 scatter_direction;
+
+
+    switch(mat.type){
+        case DIFFUSE:
+            scatter_direction = normalize(rec.normal + random_vec_on_hemisphere(rec.normal));
+            //if(near_zero(bounce_dir)) bounce_dir = rec.normal;
+            ray_color *= mat.albedo;
+            break;
+
+        case METAL:
+            scatter_direction = normalize(reflect(ray.dir,rec.normal) + random_vec_on_hemisphere(rec.normal) * mat.roughness);
+            ray_color *= mix(vec4(1.0), mat.albedo, mat.metalness);
+            break;
+
+        case TRANSMISSIVE:
+            float ref_ratio = rec.frontFace ? (AIR_REF_INDEX / mat.ior) 
+                                            : (mat.ior / AIR_REF_INDEX);
+    
+            vec3 unit_direction = normalize(ray.dir);
+            
+            float cos_theta = min(dot(-unit_direction, rec.normal), 1.0);
+            float sin_theta = sqrt(1.0 - cos_theta*cos_theta);
+            
+            bool cannot_refract = ref_ratio * sin_theta > 1.0;
+            vec3 direction;
+            
+            if (cannot_refract || reflectance(cos_theta, ref_ratio) > random()) {
+                scatter_direction = reflect(unit_direction, rec.normal);
+            } else {
+                scatter_direction = refract(unit_direction, rec.normal, ref_ratio);
+            }
+
+            if (mat.opacity_subsurface_strength < 1.0) {
+                ray_color *= mat.transmission_subsurface_color;
+            }
+
+            break;
+
+        case SUBSURFACE:
+            // TODO - fix this
+            scatter_direction = normalize(rec.normal + mat.opacity_subsurface_strength * random_vec_on_hemisphere(rec.normal));
+            ray_color *= mat.transmission_subsurface_color;
+            break;
+
+        default:
+            // Material type unknown
+            return false;
+            break;
+    }
+
+    ray.orig = rec.p;
+    ray.dir = scatter_direction;
+    
+    return true;
 }
 
 
@@ -311,37 +386,63 @@ bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
 }
 
 // Color of the skybox where the ray is pointing to
-vec4 skybox_color(Ray r){
+vec4 skybox_color_day(Ray r) {
+    const vec3 sun_dir = vec3(-0.33, 0.67, -0.67);
+    const vec4 sun_color = vec4(1.0);
+    const float sun_size = 0.999;
+    const float light_bleed = 0.0003;
+    const vec4 horizon_color = vec4(0.231, 0.756, 0.945, 1.0);
+    const vec4 zenith_color = vec4(1.0);
+
     vec3 dir_unit = normalize(r.dir);
-    float a = 0.5 * (dir_unit.y + 1.0);
-    return (1.0 - a) * vec4(1.0, 1.0, 1.0, 1.0) + a * vec4(0.286, 0.365, 0.631, 1.0);
+    float a = 0.5 * (dir_unit.y + 1.0); 
+    vec4 sky_gradient = mix(horizon_color, zenith_color, a);
+
+    float sun_dot = dot(sun_dir, dir_unit);
+    float sun_mask = smoothstep(sun_size - light_bleed, sun_size + light_bleed, sun_dot);
+
+    return mix(sky_gradient, sun_color, sun_mask);
 }
+
+vec4 skybox_color_night(Ray r) {
+    const vec3 moon_dir = normalize(vec3(0.33, 0.67, -0.67));
+    const vec4 moon_color = vec4(0.9, 0.9, 0.8, 1.0); 
+    const float moon_size = 0.999;
+    const float light_bleed = 0.0003;
+    const vec4 horizon_color = vec4(0.0);
+    const vec4 zenith_color = vec4(0.005, 0.005, 0.005, 1.0); 
+
+    vec3 dir_unit = normalize(r.dir);
+    float a = 0.5 * (dir_unit.y + 1.0); 
+    vec4 sky_gradient = mix(horizon_color, zenith_color, a);
+
+    float moon_dot = dot(moon_dir, dir_unit);
+    float moon_mask = smoothstep(moon_size - light_bleed, moon_size + light_bleed, moon_dot);
+
+    return mix(sky_gradient, moon_color, moon_mask);
+}
+
 
 // Calculates the color of the ray by tracing it with the scene
 vec4 ray_color(Ray r){
-    vec4 accumulated_color = vec4(1.0); 
-    Ray current_ray = r;
+    vec4 incoming_light = vec4(0.0);
+    vec4 ray_color = vec4(1.0); 
     
     for (int bounce = 0; bounce < max_bounces; bounce++) {
         Hit h;
-        if (hit_scene(current_ray, Interval(0.005, PINF), h)) {
+        if (hit_scene(r, Interval(0.005, PINF), h)) {
             //return 0.5 * (vec4(h.normal,0.0)+vec4(1.0)); // Normal vector colors
-            Ray scattered;
-            vec4 attenuation;
-            if(scatter(h.mat,h,attenuation,current_ray,scattered)){
-                current_ray = scattered;
-                accumulated_color *= attenuation;
-            }else{
-                // Material not found color
-                return vec4(0.984, 0.224, 1.0, 1.0);
+            if(!scatter(h,r,ray_color,incoming_light)){
+                // No scatering material
+                break;
             }
-            
         } else {
-            return accumulated_color * skybox_color(r);
+            incoming_light += skybox_color_night(r) * ray_color;
+            break;
         }
     }
     
-    return vec4(0.0);
+    return incoming_light;
 }
 
 // Generates a ray pointing to the pixel this thread is assign with a random half-pixel (square) offset
