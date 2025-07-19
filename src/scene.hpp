@@ -15,29 +15,43 @@ struct alignas(16) Sphere{
     int mat;
 };
 
+// Based on Blender 4.5LTS Principled BSDF
 struct Material {
-    glm::vec4 albedo;           // Base color rgb
+    glm::vec4 albedo;           // Surface color rgb. Alpha controls opacity: 0.0 = transparent 1.0 = opaque
 
-    glm::vec4 emission_color;   // Rgb color of emited light, 0.0 for non emited
-    
-    // Shared rgb color for transmision or subsurface scattering
-    glm::vec4 transmission_subsurface_color;  
-    
-    float metalness;            // 0.0 = dielectric , 1.0 = metalic
+    // Subsurface | Method: Christensen-Burley
+    glm::vec4 subsurface;       // Average distance the ligths scatter below the surface
+                                // Alpha controls weight: 0.0 = diffuse , 1.0 = subsurface
+
+    // Specular | Method: GGX
+    glm::vec4 specular_tint;    // Color tint for specular and metalic relfections
+                                // Alpha controls IOR Level: 
+                                // 0.0 = no reflections , 0.5 = no adjustment, 1.0 = double reflections
+
+    // Emission
+    glm::vec4 emission_color;   // Color of the light emited. Alpha controls strength
+
+    // General
     float roughness;            // 0.0 = smooth , 1.0 = rough
-    
-    // Shared parameter:
-    // - If transmission => opacity: 0.0 = transparent, 1.0 = opaque
-    // - If subsurface   => subsurface strength: intensity of dispersion
-    float opacity_subsurface_strength;   
-    
+    float metallic;             // 0.0 = dielectric , 1.0 = metalic
     float ior;                  // Index of refraction
-    
-    int type;                   // Flag to know what type of material is this
-    int _padding3[3];
+
+    // Transmission
+    float trs_weight;           // 0.0 = opaque , 1.0 = transmisive
+
+    // Coat
+    // TODO
+
+    // Sheen
+    // TODO
 };
 
-
+struct Light{
+    int type;
+    float str;
+    float aux1;
+    float aux2;
+};
 
 class Scene{
 public:

@@ -23,157 +23,24 @@ Scene::Scene(){
 
     int ground = addMaterial({
         albedo: glm::vec4(0.129, 0.388, 0.082, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(0.0),
         emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(0.0),
-        metalness: 0.0,
         roughness: 0.8,
-        opacity_subsurface_strength: 1.0,
-        ior: 1.5,
-        type: DIFFUSE,
-    });
-
-    int diffuse = addMaterial({
-        albedo: glm::vec4(0.76, 0.2, 0.16, 1.0),
-        emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(0.0),
-        metalness: 0.0,
-        roughness: 0.8,
-        opacity_subsurface_strength: 1.0,
-        ior: 1.5,
-        type: DIFFUSE,
-    });
-    
-    int mirror = addMaterial({
-        albedo: glm::vec4(1.0),
-        emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(0.0),
-        metalness: 1.0,
-        roughness: 0.0,
-        opacity_subsurface_strength: 1.0,
-        ior: 1.5,
-        type: METAL,
-    });
-
-    int glass = addMaterial({
-        albedo: glm::vec4(1.0),
-        emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(1.0),
-        metalness: 0.0,
-        roughness: 0.0,
-        opacity_subsurface_strength: 0.1,
-        ior: 1.50,
-        type: TRANSMISSIVE,
-    });
-
-
-    int subsurface = addMaterial({
-        albedo: glm::vec4(0.799, 0.485, 0.347, 1.0),
-        emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(1.0, 0.7, 0.7, 1.0),
-        metalness: 0.0,
-        roughness: 0.3,
-        opacity_subsurface_strength: 0.5,
-        ior: 1.4,
-        type: SUBSURFACE,
-    });
-
-    int warm_ligth = addMaterial({
-        albedo: glm::vec4(1.0),
-        emission_color: glm::vec4(0.984, 0.882, 0.337, 1.0),
-        transmission_subsurface_color: glm::vec4(0.0),
-        metalness: 0.0,
-        roughness: 1.0,
-        opacity_subsurface_strength: 1.0,
+        metallic: 0.0,
         ior: 1.0,
-        type: EMITER,
-    });
-
-    int white_ligth = addMaterial({
-        albedo: glm::vec4(1.0),
-        emission_color: glm::vec4(1.0),
-        transmission_subsurface_color: glm::vec4(0.0),
-        metalness: 0.0,
-        roughness: 1.0,
-        opacity_subsurface_strength: 1.0,
-        ior: 1.0,
-        type: EMITER,
-    });
-
-    int blue_ligth = addMaterial({
-        albedo: glm::vec4(1.0),
-        emission_color: glm::vec4(0.101, 0.643, 0.835, 1.0),
-        transmission_subsurface_color: glm::vec4(0.0),
-        metalness: 0.0,
-        roughness: 1.0,
-        opacity_subsurface_strength: 1.0,
-        ior: 1.0,
-        type: EMITER,
-    });
-
-    int hybrid = addMaterial({
-        albedo: glm::vec4(0.301, 0.533, 0.266, 1.0),
-        emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(0.227, 0.725, 0.850, 1.0),
-        metalness: 0.0,
-        roughness: 0.2,
-        opacity_subsurface_strength: 0.3,
-        ior: 1.333,
-        type: TRANSMISSIVE,
+        trs_weight: 0.0,
     });
 
     int blueMatte = addMaterial({
-        albedo: glm::vec4(0.208, 0.612, 0.8, 1.0),
+        albedo: glm::vec4(0.133, 0.42, 0.878, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,1.0),
         emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(0.0),
-        metalness: 0.0,
-        roughness: 0.2,
-        opacity_subsurface_strength: 1.0,
-        ior: 1.333,
-        type: DIFFUSE,
-    });
-
-    int redMetal = addMaterial({
-        albedo: glm::vec4(0.82, 0.118, 0.118, 1.0),
-        emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(0.0),
-        metalness: 1.0,
-        roughness: 0.8,
-        opacity_subsurface_strength: 1.0,
-        ior: 1.333,
-        type: METAL,
-    });
-
-    int yellowMetal = addMaterial({
-        albedo: glm::vec4(0.945, 0.949, 0.212, 1.0),
-        emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(0.0),
-        metalness: 1.0,
-        roughness: 0.1,
-        opacity_subsurface_strength: 1.0,
-        ior: 1.333,
-        type: METAL,
-    });
-
-    int dielectric075 = addMaterial({
-        albedo: glm::vec4(0.0),
-        emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(1.0),
-        metalness: 1.0,
-        roughness: 0.1,
-        opacity_subsurface_strength: 0.0,
-        ior: 0.75,
-        type: TRANSMISSIVE,
-    });
-
-    int dielectric133 = addMaterial({
-        albedo: glm::vec4(0.0),
-        emission_color: glm::vec4(0.0),
-        transmission_subsurface_color: glm::vec4(1.0),
-        metalness: 1.0,
-        roughness: 0.1,
-        opacity_subsurface_strength: 0.0,
-        ior: 1.33,
-        type: TRANSMISSIVE,
+        roughness: 0.3,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 0.0,
     });
 
     // Ground sphere
@@ -183,45 +50,63 @@ Scene::Scene(){
         mat: ground
     });
 
+    addSphere({
+        pos: glm::vec3(0.0,0.0,-10.0),
+        r: 1.0,
+        mat: blueMatte
+    });
+
+
+
     /*
 
     addSphere({
         pos: glm::vec3(0.0,0.0,-10.0),
         r: 1.0,
-        mat: diffuse
+        mat: gold
     });
 
     addSphere({
         pos: glm::vec3(2.1,0.0,-10.0),
         r: 1.0,
-        mat: mirror
+        mat: red_plastic
     });
 
     addSphere({
         pos: glm::vec3(4.2,0.0,-10.0),
         r: 1.0,
-        mat: subsurface
+        mat: frosted_glass
     });
 
     addSphere({
         pos: glm::vec3(6.3,0.0,-10.0),
         r: 1.0,
-        mat: hybrid
+        mat: neon_light
     });
 
     addSphere({
         pos: glm::vec3(-2.1,0.0,-10.0),
         r: 1.0,
-        mat: glass
+        mat: human_skin
     });
 
     addSphere({
         pos: glm::vec3(-4.2,0.0,-10.0),
         r: 1.0,
-        mat: warm_ligth
+        mat: water
     });
-    
+
+    addSphere({
+        pos: glm::vec3(-6.3,0.0,-10.0),
+        r: 1.0,
+        mat: asphalt
+    });
+
     */
+    
+    
+
+    /*
 
     addSphere({
         pos: glm::vec3(0.0,0.0,-10.0),
@@ -294,6 +179,8 @@ Scene::Scene(){
         r: 0.3,
         mat: blue_ligth
     });
+
+    */
 
 }
 

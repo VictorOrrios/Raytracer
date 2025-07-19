@@ -76,8 +76,8 @@ const float nearClip = 0.1f;
 const float farClip = 100.0f; 
 
 // Initial parameters for the camera
-const glm::vec3 cameraPositionInitial = glm::vec3(0.0f, 0.0f, 0.0f);
-const glm::vec3 cameraFrontInitial = glm::vec3(worldFront);
+const glm::vec3 cameraPositionInitial = glm::vec3(0.0f, 0.0f, -6.0f);
+const glm::vec3 cameraFrontInitial = glm::vec3(0.0f, 0.0f, -7.0f);
 const glm::vec3 cameraUpInitial = glm::vec3(worldUp);
 const glm::vec3 frontVectorTemp = cameraFrontInitial-cameraPositionInitial;
 const float yawInitial = glm::degrees(glm::atan(frontVectorTemp.x,-frontVectorTemp.z));
@@ -128,7 +128,8 @@ private:
     };    
 
     // All the info about the camera in each frame
-    struct Camera{
+    struct Camera
+    {
         glm::mat4 view;
         glm::mat4 viewInv;
         glm::mat4 proj;
@@ -142,6 +143,10 @@ private:
     struct UniformBufferObject
     {
         Camera camera;
+    };
+
+    struct PushConstants
+    {
         float time;
         uint32_t frameCount;
     };
@@ -189,6 +194,9 @@ private:
     VkDescriptorSetLayout descriptorSetLayoutGlobal;
     VkDescriptorSet descriptorSetGlobal;
     VkDescriptorPool descriptorPool; 
+
+    // Push constants
+    PushConstants pushConstants;
 
     // UBOs
     vector<VkBuffer> uniformBuffers;
@@ -1062,6 +1070,14 @@ private:
         array<VkDescriptorSetLayout,2> descriptorSetLayouts = {descriptorSetLayoutPerFrame,descriptorSetLayoutGlobal};
         pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
 
+        // Push constants set-up
+        VkPushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(PushConstants);
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
         {
             throw runtime_error("failed to create pipeline layout");
@@ -1136,6 +1152,8 @@ private:
 
             array<VkDescriptorSet,2> descriptorSets= {descriptorSetsPerFrame[currentFrame],descriptorSetGlobal};
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptorSets.data(), 0, 0);
+
+            vkCmdPushConstants(commandBuffer,pipelineLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(PushConstants),&pushConstants);
 
             vkCmdDispatch(commandBuffer, (swapChainExtent.width + 31) / 32, (swapChainExtent.height + 31) / 32, 1);
 
@@ -1226,6 +1244,8 @@ private:
             throw std::runtime_error("failed to acquire swap chain image!");
         }
 
+        updatePushConstants();
+
         updateUniformBuffer(currentFrame);
 
         vkResetFences(device, 1, &inFlightFences[currentFrame]);
@@ -1306,7 +1326,11 @@ private:
     }
 
 
-    
+    // ---------------- Push constants update per each frame ------------------------------------------------
+    void updatePushConstants(){
+        pushConstants.time = lastFrame;
+        pushConstants.frameCount = frameCount;
+    }
     
     
     // ---------------- UBO creation ------------------------------------------------
@@ -1327,6 +1351,7 @@ private:
             vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
         }
     }
+
 
     // ---------------- UBO update per each frame ------------------------------------------------
     void updateUniformBuffer(uint32_t currentImage)
@@ -1358,10 +1383,6 @@ private:
         ubo.camera.position = cameraPos;
 
         ubo.camera.tanHalfFOV = tan(glm::radians(fov) / 2.0);
-
-        ubo.time = lastFrame;
-        
-        ubo.frameCount = frameCount;
 
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
