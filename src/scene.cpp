@@ -1,6 +1,7 @@
 #include "scene.hpp"
 #include <random>
 #include <iostream>
+#include <algorithm>
 
 int randomInt(int min, int max) {
     static std::random_device rd;  
@@ -20,24 +21,30 @@ float randomFloat(float min, float max) {
 
 
 Scene::Scene(){
+    // Add skybox to light list
+    addLight({
+        pos_angle_aux: glm::vec4(0.0,0.0,0.0,0.0),
+        color_str: glm::vec4(1.0,1.0,1.0,skyboxStrength),
+        type: AMBIENT
+    });
 
     int ground = addMaterial({
         albedo: glm::vec4(0.129, 0.388, 0.082, 1.0),
         subsurface: glm::vec4(0.0),
         specular_tint: glm::vec4(0.0),
         emission_color: glm::vec4(0.0),
-        roughness: 0.8,
+        roughness: 1.0,
         metallic: 0.0,
         ior: 1.0,
         trs_weight: 0.0,
     });
 
-    int blueMatte = addMaterial({
-        albedo: glm::vec4(0.133, 0.42, 0.878, 1.0),
+    int redMatte = addMaterial({
+        albedo: glm::vec4(1.0, 0.0, 0.0, 1.0),
         subsurface: glm::vec4(0.0),
-        specular_tint: glm::vec4(1.0,1.0,1.0,1.0),
+        specular_tint: glm::vec4(0.0,0.0,1.0,1.0),
         emission_color: glm::vec4(0.0),
-        roughness: 0.3,
+        roughness: 0.1,
         metallic: 0.0,
         ior: 1.5,
         trs_weight: 0.0,
@@ -53,7 +60,7 @@ Scene::Scene(){
     addSphere({
         pos: glm::vec3(0.0,0.0,-10.0),
         r: 1.0,
-        mat: blueMatte
+        mat: redMatte
     });
 
 
@@ -182,13 +189,38 @@ Scene::Scene(){
 
     */
 
+    std::cout<<"Scene loaded"<<std::endl;
+    std::cout<<"Number of spheres: "<<sphereVec.size()<<std::endl;
+    std::cout<<"Number of materials: "<<materialVec.size()<<std::endl;
+    std::cout<<"Number of lights: "<<lightsVec.size()<<std::endl;
 }
 
 void Scene::addSphere(Sphere s){
+    // If it emmits light add it to the list
+    if(materialVec[s.mat].emission_color.a > 0.0){
+        addLight({
+            pos_angle_aux: glm::vec4(s.pos,s.r),
+            color_str: materialVec[s.mat].emission_color,
+            type: SPHERE 
+        });
+    }
+
     sphereVec.push_back(s);
 }
 
 int Scene::addMaterial(Material m){
     materialVec.push_back(m);
     return materialVec.size()-1;
+}
+
+void Scene::addLight(Light l){
+    if(lightsVec.size() == 0){
+        l.accumulated_str = l.color_str.a;
+    }else{
+        l.accumulated_str = lightsVec[lightsVec.size()-1].accumulated_str + l.color_str.a;
+    }
+
+    lightsVec.push_back(l);
+
+    lights_strength_sum += l.color_str.a;
 }

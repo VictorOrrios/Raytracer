@@ -57,7 +57,7 @@ const vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 // Number of shader storage buffers used
-const int numSSBO = 2;
+const int numSSBO = 3;
 
 // World vetors
 const glm::vec4 worldFront = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
@@ -148,7 +148,10 @@ private:
     struct PushConstants
     {
         float time;
-        uint32_t frameCount;
+        int frameCount;
+        int total_lights;
+        float lights_strength_sum;
+        glm::vec3 world_up;
     };
 
     // -------------------------------------------------------------------------
@@ -362,9 +365,9 @@ private:
             cameraPos += moveSpeedDelta * cameraFront;
         }else{
             if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-                cameraPos += moveSpeedDelta * cameraFront;
+                cameraPos += moveSpeedDelta * glm::normalize(cameraFront);
             if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-                cameraPos -= moveSpeedDelta * cameraFront;
+                cameraPos -= moveSpeedDelta * glm::normalize(cameraFront);
             if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
                 cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * moveSpeedDelta;
             if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
@@ -495,8 +498,7 @@ private:
         createCommandPool();
         createUniformBuffers();
         createImageBuffer(WIDTH,HEIGHT);
-        createShaderStorageBufferSpheres();
-        createShaderStorageBufferMaterials();
+        createShaderStorageBuffers();
         createDescriptorPool();
         createDescriptorSetsPerFrame();
         createDescriptorSetsGlobal();
@@ -1330,6 +1332,9 @@ private:
     void updatePushConstants(){
         pushConstants.time = lastFrame;
         pushConstants.frameCount = frameCount;
+        pushConstants.total_lights = scene.lightsVec.size();
+        pushConstants.lights_strength_sum = scene.lights_strength_sum;
+        pushConstants.world_up = worldUp;
     }
     
     
@@ -1443,12 +1448,10 @@ private:
     }
 
     // ---------------- SSBO creation ------------------------------------------------
-    void createShaderStorageBufferSpheres(){
+    void createShaderStorageBuffers(){
         createSSBOVector(0,scene.sphereVec);
-    }
-
-    void createShaderStorageBufferMaterials(){
         createSSBOVector(1,scene.materialVec);
+        createSSBOVector(2,scene.lightsVec);
     }
 
     template <typename T>
@@ -1624,6 +1627,11 @@ private:
         ssboInfos[1].buffer = shaderStorageBuffers[1];
         ssboInfos[1].offset = 0;
         ssboInfos[1].range = sizeof(Material) * scene.materialVec.size();
+
+        // Lights SSBO
+        ssboInfos[2].buffer = shaderStorageBuffers[1];
+        ssboInfos[2].offset = 0;
+        ssboInfos[2].range = sizeof(Light) * scene.lightsVec.size();
 
         array<VkWriteDescriptorSet, 1+numSSBO> descriptorWrites{};
 

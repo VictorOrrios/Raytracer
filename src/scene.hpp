@@ -1,13 +1,16 @@
 #include <glm/glm.hpp>
 #include <vector>
 
-enum MaterialsFunctions{
-    DIFFUSE = 1,
-    METAL = 2,
-    TRANSMISSIVE = 3, 
-    SUBSURFACE = 4, 
-    EMITER = 5,
+
+enum LightTypes{
+    AMBIENT = 0,
+    SPHERE = 1,
+    POINT = 2,
+    DIRECTIONAL = 3,
+    CONE = 4,
+    AREA = 5,
 };
+
 
 struct alignas(16) Sphere{
     glm::vec3 pos;
@@ -47,21 +50,26 @@ struct Material {
 };
 
 struct Light{
+    glm::vec4 pos_angle_aux;
+    glm::vec4 color_str;
     int type;
-    float str;
-    float aux1;
-    float aux2;
+    float accumulated_str;
 };
 
 class Scene{
 public:
     std::vector<Sphere> sphereVec;
     std::vector<Material> materialVec;
+    std::vector<Light> lightsVec;
+    float lights_strength_sum = 0.0;
     
     Scene();
 private:
+    const float skyboxStrength = 1.0;
+
     void addSphere(Sphere s);
     int addMaterial(Material m);
+    void addLight(Light l);
 };
 
 

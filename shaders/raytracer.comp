@@ -14,6 +14,14 @@
 #define TRANSPARENT     6
 #define VOID            7
 
+#define AMBIENT         0
+#define SPHERE          1
+#define POINT           2
+#define DIRECTIONAL     3
+#define CONE            4
+#define AREA            5
+
+
 
 // ------------ Struct definitions --------------
 struct Camera{
@@ -34,6 +42,13 @@ struct Ray{
 struct Interval{
     float minV;
     float maxV;
+};
+
+struct Light{
+    vec4 pos_angle_aux;
+    vec4 color_str;
+    int type;
+    float accumulated_str;
 };
 
 struct Material{
@@ -77,12 +92,12 @@ struct Hit{
     vec3 normal; // The normal where it hit
     int mat; // Material index of the object it hit
     float t; // The distance from the ray origin to the hit
-    bool frontFace; // True if hit is to a front facing surface
+    bool front_face; // True if hit is to a front facing surface
 };
 
 // ------------ Constant definitions --------------
 const int rays_per_pixel = 20;
-const int max_bounces = 10;
+const int max_bounces = 5;
 
 
 const float PINF = 1.0 / 0.0;
@@ -94,6 +109,9 @@ const Interval universe_interval = Interval(NINF, PINF);
 layout(push_constant) uniform PushConstants {
     float time;
     uint frameCount;
+    int total_ights;
+    float lights_strength_sum;
+    vec3 world_up;
 } pc;
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
@@ -110,6 +128,10 @@ layout(set = 1, std430, binding = 2) buffer MaterialsSSBOOut {
     Material materials[];
 };
 
+layout(set = 1, std430, binding = 3) buffer LightsSSBOOut {
+    Light lights[];
+};
+
 // ------------ Workgroup sizes --------------
 layout(local_size_x = 32, local_size_y = 32) in;
 
@@ -122,7 +144,6 @@ uint seed;
 
 
 // ------------ RNG functions --------------
-
 uint hash(uint x) {
     x ^= x >> 16;
     x *= 0x7feb352dU;
@@ -191,6 +212,10 @@ vec3 at(const Ray r, const float t){
     return r.orig + t*r.dir;
 }
 
+vec3 lambertian_diffuse(const vec3 normal){
+    return normalize(normal + random_unit_vec());
+}
+
 
 // ------------ Interval functions --------------
 bool contains(Interval i, float x){
@@ -209,8 +234,8 @@ float clamp_interval(Interval i, float x){
 // Having the outward facing normal of the surface hit
 // updates the record frontFace and normal to correct values
 void set_face_normal(inout Hit h, const Ray r, const vec3 outward_normal){
-    h.frontFace = dot(r.dir,outward_normal) < 0;
-    if(h.frontFace){
+    h.front_face = dot(r.dir,outward_normal) < 0;
+    if(h.front_face){
         h.normal = outward_normal;
     }else{
         h.normal = -outward_normal;
@@ -248,6 +273,36 @@ bool hit_sphere(const Sphere s, const Interval ray_t, const Ray r, out Hit rec){
 
     return true;
 }
+
+// ------------ Scene functions --------------
+// Calculates the hit record for the ray
+// ray_tmin and ray_tmax to be investigated
+bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
+    Hit temp_rec;
+    bool hit_anything = false;
+    float closest_so_far = ray_t.maxV;
+
+    // For every sphere in the scene
+    for(int i = 0; i< spheres.length(); i++){
+        if(hit_sphere(spheres[i],ray_t,r,temp_rec)){
+            hit_anything = true;
+            if(closest_so_far > temp_rec.t){
+                closest_so_far = temp_rec.t;
+                rec = temp_rec;
+            }
+        }
+    }
+
+    return hit_anything;
+}
+
+// Returns true if ray has hit anything
+bool shadow_ray(const Ray r){
+    Hit h;
+    Interval i = Interval(0.005, PINF);
+    return hit_scene(r,i,h);
+}
+
 
 // ------------ Skybox functions --------------
 
@@ -296,17 +351,67 @@ vec4 skybox_color_white(Ray r){
 
 // Color of the skybox where the ray is pointing to
 vec4 skybox_color(Ray r) {
-    return skybox_color_day(r);
+    return skybox_color_white(r);
 }
+
 
 // ------------ Lighting functions --------------
 // Strength based importance sampling. Returns radiance of the light 
 vec3 sample_light(vec3 point, vec3 normal, out vec3 L, out float pdf){
-    float rand = random();
+    // Choose light to sample with ponderated sampling in strength and a binary search
+    float rand_strength = random() * pc.lights_strength_sum; 
+    int begin = 0, end = pc.total_ights, mid = (begin + end) / 2;
+    while(end - begin > 1){
+        if(rand_strength <= lights[mid].accumulated_str){
+            end = mid + 1;
+        }else{
+            begin = mid;
+        }
+        mid = (begin + end) / 2;
+    }
+    Light picked_light = lights[begin];
 
+    switch(picked_light.type){
+        case AMBIENT:
+            L = normal;
+            pdf = 1.0;
+            return picked_light.color_str.rgb * picked_light.color_str.a;
+            break;
+        case SPHERE:
+
+            break;
+        case POINT:
+
+            break;
+        case DIRECTIONAL:
+            // If surface does not cover the directional light
+            vec3 light_dir = -picked_light.pos_angle_aux.xyz;
+            if(dot(normal,light_dir) > 0.0){
+                Ray s_ray = Ray(point,light_dir);
+                if(!shadow_ray(s_ray)){
+                    L = light_dir;
+                    pdf = 1.0;
+                    return picked_light.color_str.rgb * picked_light.color_str.a;
+                }
+            }
+            L = normal;
+            pdf = 0.0;
+            return vec3(0.0);
+            break;
+        case CONE:
+
+            break;
+        case AREA:
+
+            break;
+        default:
+
+            break;
+    }
 
     return vec3(1.0);
 }
+
 
 // ------------ Material functions --------------
 int sample_lobe(const Material mat) {
@@ -351,104 +456,161 @@ int sample_lobe(const Material mat) {
     return TRANSMISSION;
 }
 
+
+
+
+
 // Fresnel-Schlick aproximation to reflectance
-float reflectance(float cosine, float ref_idx) {
-    float r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
-    r0 = r0 * r0;
-    return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
+float reflectance(float cos_theta, float ref_idx) {
+    float F0 = (1.0 - ref_idx) / (1.0 + ref_idx);
+    F0 = F0 * F0;
+    return F0 + (1.0 - F0) * pow(1.0 - cos_theta, 5.0);
 }
 
-// Tints color of light of ray based on hit record and calculates new ray to trace. Returns true if ray bounced, false if it was absorbed
-bool scatter(const Hit rec, inout Ray ray, inout vec4 attenuation, inout vec4 radiance){
-    Material mat = materials[rec.mat];
+// Normal distribution function. GGX
+float ggx_distribution(float alpha, vec3 N, vec3 H){
+    float alpha_squared = alpha * alpha;
+    float dot_product = clamp(dot(N, H), 0.0, 1.0);
+    float x = dot_product * dot_product * (alpha_squared - 1.0) + 1.0;
+    return alpha_squared / (PI * x * x);
+}
 
-    int lobe = sample_lobe(mat);
-    vec3 ray_dir = normalize(ray.dir);
+// Geometry shadowing function. Schilick-Beckmann
+float G1_CT(vec3 X, vec3 N, float alpha){
+    float k = alpha / 2.0;
+    float dot_product = max(0.0,dot(N,X));
+    return dot_product / max(0.000001,(dot_product*(1.0 - k) + k));
+}
 
-    ray.orig = rec.p;
+// Converts spherical coordinates (theta, phi) to a 3D cartesian unit vector
+vec3 sphere_to_cartesian(float theta, float phi){
+    float sin_t = sin(theta);
+    return vec3(
+        sin_t*cos(phi),
+        sin_t*sin(phi),
+        cos(theta)
+    );
+}
+
+// Aligns a local direction vector X to world space using normal N as reference
+vec3 align_to_world(vec3 X, vec3 N){
+    vec3 up;
+    // Aproximation for speed, not 100% orthonormal when N is near +Z
+    if(N.z > 0.9999){
+        up = vec3(1.0,0.0,0.0);
+    }else{
+        up = vec3(0.0,0.0,1.0);
+    }
+
+    vec3 T = normalize(cross(up,N));
+    vec3 B = cross(N,T);
+
+    return T*X.x + B*X.y + N*X.z;
+}
+
+// Samples a GGX-distributed microfacet normal and returns the reflected direction
+vec3 sample_ggx(Material mat, vec3 V, vec3 N){
+    float e1 = random(), e2 = random();
+    float alpha2 = mat.roughness * mat.roughness;
+    float theta = acos(sqrt( (1.0 - e1) / (1.0 + (alpha2 - 1.0)*e1) ));
+    float phi = 2.0 * PI * e2;
+
+    vec3 H_tan = sphere_to_cartesian(theta, phi);
+    vec3 H = align_to_world(H_tan,N);
+
+    return reflect(-V,H);
+}
+
+float pdf_ggx(float D, vec3 V, vec3 N, vec3 H){
+    return (D * dot(N,H)) / max(4.0 * dot(V,H), 1e-5);
+}
+
+// Return whats the tint that mat gives from L to V when it bounces on it
+vec3 eval_mat(Material mat, vec3 L, vec3 V, Hit rec, out float pdf){
+    vec3 N = rec.normal;
+    vec3 H = normalize(L+V);
+    float NdotL = max(0.0,dot(L,N));
     
-    switch(lobe){
-        case DIFFUSE:
-            // Lambertian difuse 
-            ray.dir = normalize(rec.normal + random_unit_vec());
-            attenuation.rgb *= mat.albedo.rgb;
-            break;
-        case SUBSURFACE:
+    float ri = rec.front_face ? (1.0/mat.ior) : mat.ior;
+    float cos_theta = clamp(dot(N,V),0.0,1.0);
+    float ks = reflectance(cos_theta,ri);
+    float kd = 1.0 - ks;
 
-            break;
-        case SPECULAR:
-            /*
-            vec3 microfacet_normal = sample_ggx(rec.normal, mat.roughness);
-            ray.dir = reflect(ray_dir, microfacet_normal);
-            attenuation.rgb *= mix(mat.specular_tint.rgb, mat.albedo.rgb, mat.metallic);
-            break;
-            */
-        case METAL:
-            /*
-            microfacet_normal = sample_ggx(rec.normal, mat.roughness);
-            ray.dir = reflect(ray_dir, microfacet_normal);
-            attenuation.rgb *= mat.albedo.rgb;
-            break;
-            */
-        case TRANSMISSION:
-            break;
-        case EMISSION:
-            radiance += vec4(mat.emission_color.rgb * mat.emission_color.a, 1.0) * attenuation;
-            return false; // Ray isn't scattered
-            break;
-        case TRANSPARENT:
-            break;
-        // In case of TRANSPARENT ray passes trough the materia, unaffected        
-    }
+    vec3 f_diffuse = mat.albedo.xyz / PI;
 
-    return true; // Ray is scattered
+    float alpha = mat.roughness * mat.roughness;
+    float D = ggx_distribution(alpha,N,H);
+    float G = G1_CT(L,N,alpha) * G1_CT(V,N,alpha);
+    float F = ks;
+    
+    vec3 f_specular = mat.specular_tint.xyz * D*G*F / max(0.00001,(4.0*dot(V,N)*NdotL));
+
+    float pdf_specular = pdf_ggx(D,V,N,H);
+    float pdf_diffuse = NdotL / PI;
+    pdf = kd * pdf_diffuse + ks * pdf_specular;
+
+    return kd*f_diffuse + f_specular;
+}
+
+// Samples an outgoing light direction from the material
+vec3 sample_mat(Material mat, vec3 V, vec3 N){
+    return sample_ggx(mat,V,N);
 }
 
 
+// Computes direct lighting contribution at a hit point
+vec3 direct_light(Hit rec, Ray ray){
+    vec3 L_emission, L_dir, fr;
+    float cos_theta, light_pdf, mat_pdf;
 
-// ------------ Scene functions --------------
-// Calculates the hit record for the ray
-// ray_tmin and ray_tmax to be investigated
-bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
-    Hit temp_rec;
-    bool hit_anything = false;
-    float closest_so_far = ray_t.maxV;
+    L_emission = sample_light(rec.p,rec.normal,L_dir,light_pdf);
+    cos_theta = max(0.0,dot(rec.normal,L_dir));
+    fr = eval_mat(materials[rec.mat], L_dir, -ray.dir, rec, mat_pdf);
 
-    // For every sphere in the scene
-    for(int i = 0; i< spheres.length(); i++){
-        if(hit_sphere(spheres[i],ray_t,r,temp_rec)){
-            hit_anything = true;
-            if(closest_so_far > temp_rec.t){
-                closest_so_far = temp_rec.t;
-                rec = temp_rec;
-            }
-        }
-    }
-
-    return hit_anything;
+    return L_emission * fr * cos_theta / light_pdf;
 }
-
-
 
 
 // Calculates the color of the ray by tracing it with the scene
 vec4 ray_color(Ray r){
-    vec4 attenuation = vec4(1.0);
-    vec4 radiance = vec4(0.0);
+    vec3 color = vec3(0.0);
+    vec3 attenuation = vec3(1.0);
+    Hit h;
     
-    for (int bounce = 0; bounce < max_bounces; bounce++) {
-        Hit h;
+    for (int bounce = 0; bounce <= max_bounces; bounce++) {
         if (hit_scene(r, Interval(0.005, PINF), h)) {
-            if(!scatter(h,r,attenuation,radiance)){
+            Material mat = materials[h.mat];
+
+            // If material is emissive stop casting
+            if(mat.emission_color.a > 0.0){
+                color += attenuation * mat.emission_color.rgb;
                 break;
             }
+
+            // Get the direct light contribution
+            color += direct_light(h,r) * attenuation; 
+
+            // Last iteration only has direct light
+            if(bounce < max_bounces){
+                // Get the indirect light contribution
+                vec3 bounce_dir = sample_mat(mat, -r.dir, h.normal);
+                float mat_pdf;
+                vec3 fr = eval_mat(mat,bounce_dir,-r.dir,h,mat_pdf);
+                float cos_theta = max(0.0, dot(h.normal, bounce_dir));
+                attenuation *= fr * cos_theta / max(0.00001,mat_pdf);
+
+                // Prepare next ray to cast
+                r.orig = h.p;
+                r.dir = bounce_dir;
+            }
         } else {
-            radiance += attenuation * skybox_color(r);
-            break;
+            // Ray has hit the skybox
+            color += attenuation * skybox_color(r).rgb;
+            return vec4(clamp(color, 0.0, 1.0),1.0);
         }
     }
-    
-    return radiance;
+
+    return vec4(clamp(color, 0.0, 1.0),1.0);
 }
 
 // Generates a ray pointing to the pixel this thread is assign with a random half-pixel (square) offset
