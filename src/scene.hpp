@@ -65,8 +65,6 @@ public:
     
     Scene();
 private:
-    const float skyboxStrength = 1.0;
-
     void addSphere(Sphere s);
     int addMaterial(Material m);
     void addLight(Light l);

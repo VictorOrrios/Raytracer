@@ -109,7 +109,7 @@ const Interval universe_interval = Interval(NINF, PINF);
 layout(push_constant) uniform PushConstants {
     float time;
     uint frameCount;
-    int total_ights;
+    int total_lights;
     float lights_strength_sum;
     vec3 world_up;
 } pc;
@@ -351,31 +351,35 @@ vec4 skybox_color_white(Ray r){
 
 // Color of the skybox where the ray is pointing to
 vec4 skybox_color(Ray r) {
-    return skybox_color_white(r);
+    return skybox_color_day(r);
 }
 
 
 // ------------ Lighting functions --------------
 // Strength based importance sampling. Returns radiance of the light 
 vec3 sample_light(vec3 point, vec3 normal, out vec3 L, out float pdf){
-    // Choose light to sample with ponderated sampling in strength and a binary search
-    float rand_strength = random() * pc.lights_strength_sum; 
-    int begin = 0, end = pc.total_ights, mid = (begin + end) / 2;
-    while(end - begin > 1){
-        if(rand_strength <= lights[mid].accumulated_str){
-            end = mid + 1;
-        }else{
-            begin = mid;
-        }
-        mid = (begin + end) / 2;
+    if (pc.total_lights == 0 || pc.lights_strength_sum <= 0.0) {
+        pdf = 0.0;
+        return vec3(0.0);
     }
-    Light picked_light = lights[begin];
+    // Choose light to sample with ponderated sampling in strength and a binary search
+    float rand_strength = random() * pc.lights_strength_sum;
+    int low = 0, high = pc.total_lights - 1;
+    while (low < high) {
+        int mid = (low + high) / 2;
+        if (rand_strength <= lights[mid].accumulated_str) {
+            high = mid;
+        } else {
+            low = mid + 1;
+        }
+    }
+    Light picked_light = lights[low];
 
     switch(picked_light.type){
         case AMBIENT:
-            L = normal;
-            pdf = 1.0;
-            return picked_light.color_str.rgb * picked_light.color_str.a;
+            L = random_vec_on_hemisphere(normal);
+            pdf = picked_light.color_str.a / pc.lights_strength_sum;
+            return picked_light.color_str.rgb;
             break;
         case SPHERE:
 
@@ -391,11 +395,11 @@ vec3 sample_light(vec3 point, vec3 normal, out vec3 L, out float pdf){
                 if(!shadow_ray(s_ray)){
                     L = light_dir;
                     pdf = 1.0;
-                    return picked_light.color_str.rgb * picked_light.color_str.a;
+                    return picked_light.color_str.rgb;
                 }
             }
             L = normal;
-            pdf = 0.0;
+            pdf = 0.00001;
             return vec3(0.0);
             break;
         case CONE:
@@ -529,11 +533,11 @@ float pdf_ggx(float D, vec3 V, vec3 N, vec3 H){
 vec3 eval_mat(Material mat, vec3 L, vec3 V, Hit rec, out float pdf){
     vec3 N = rec.normal;
     vec3 H = normalize(L+V);
-    float NdotL = max(0.0,dot(L,N));
+    float NdotL = clamp(dot(L,N),0.0,1.0);
+    float NdotV = clamp(dot(V,N),0.0,1.0);
     
     float ri = rec.front_face ? (1.0/mat.ior) : mat.ior;
-    float cos_theta = clamp(dot(N,V),0.0,1.0);
-    float ks = reflectance(cos_theta,ri);
+    float ks = clamp(reflectance(NdotV, ri), 0.0, 1.0);
     float kd = 1.0 - ks;
 
     vec3 f_diffuse = mat.albedo.xyz / PI;
@@ -543,11 +547,12 @@ vec3 eval_mat(Material mat, vec3 L, vec3 V, Hit rec, out float pdf){
     float G = G1_CT(L,N,alpha) * G1_CT(V,N,alpha);
     float F = ks;
     
-    vec3 f_specular = mat.specular_tint.xyz * D*G*F / max(0.00001,(4.0*dot(V,N)*NdotL));
+    vec3 f_specular = mat.specular_tint.rgb * D*G*F / max(0.00001,(4.0*NdotV*NdotL));
 
     float pdf_specular = pdf_ggx(D,V,N,H);
     float pdf_diffuse = NdotL / PI;
     pdf = kd * pdf_diffuse + ks * pdf_specular;
+    pdf = clamp(pdf, 0.0, 1.0);
 
     return kd*f_diffuse + f_specular;
 }
@@ -567,7 +572,7 @@ vec3 direct_light(Hit rec, Ray ray){
     cos_theta = max(0.0,dot(rec.normal,L_dir));
     fr = eval_mat(materials[rec.mat], L_dir, -ray.dir, rec, mat_pdf);
 
-    return L_emission * fr * cos_theta / light_pdf;
+    return clamp(L_emission * fr * cos_theta / light_pdf, 0.0, 1.0);
 }
 
 
@@ -597,7 +602,7 @@ vec4 ray_color(Ray r){
                 float mat_pdf;
                 vec3 fr = eval_mat(mat,bounce_dir,-r.dir,h,mat_pdf);
                 float cos_theta = max(0.0, dot(h.normal, bounce_dir));
-                attenuation *= fr * cos_theta / max(0.00001,mat_pdf);
+                attenuation *= max(vec3(0.0),fr * cos_theta / max(0.00001,mat_pdf));
 
                 // Prepare next ray to cast
                 r.orig = h.p;

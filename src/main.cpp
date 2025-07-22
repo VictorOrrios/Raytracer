@@ -393,7 +393,7 @@ private:
         if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS){
             roll = rollInitial;
             rotateMatrix = true;
-        }
+        }   
         if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS){
             roll = rollInitial;
             pitch = pitchInitial;
@@ -1629,7 +1629,7 @@ private:
         ssboInfos[1].range = sizeof(Material) * scene.materialVec.size();
 
         // Lights SSBO
-        ssboInfos[2].buffer = shaderStorageBuffers[1];
+        ssboInfos[2].buffer = shaderStorageBuffers[2];
         ssboInfos[2].offset = 0;
         ssboInfos[2].range = sizeof(Light) * scene.lightsVec.size();
 

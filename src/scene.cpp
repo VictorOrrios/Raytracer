@@ -22,29 +22,48 @@ float randomFloat(float min, float max) {
 
 Scene::Scene(){
     // Add skybox to light list
+
+    // Sun
+    addLight({
+        pos_angle_aux: glm::vec4(0.33, -0.67, 0.67,0.0),
+        color_str: glm::vec4(1.0,1.0,1.0,5.0),
+        type: DIRECTIONAL
+    });
+
+    // Daylight
     addLight({
         pos_angle_aux: glm::vec4(0.0,0.0,0.0,0.0),
-        color_str: glm::vec4(1.0,1.0,1.0,skyboxStrength),
+        color_str: glm::vec4(0.231, 0.756, 0.945,1.0),
         type: AMBIENT
     });
+
+    // Moon
+    /*
+    addLight({
+        pos_angle_aux: glm::vec4(-0.33, -0.67, 0.67,0.0),
+        color_str: glm::vec4(0.1,0.1,0.1,sunStrength),
+        type: DIRECTIONAL
+    });
+    */
+
 
     int ground = addMaterial({
         albedo: glm::vec4(0.129, 0.388, 0.082, 1.0),
         subsurface: glm::vec4(0.0),
-        specular_tint: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0),
         emission_color: glm::vec4(0.0),
         roughness: 1.0,
         metallic: 0.0,
-        ior: 1.0,
+        ior: 1.5,
         trs_weight: 0.0,
     });
 
     int redMatte = addMaterial({
         albedo: glm::vec4(1.0, 0.0, 0.0, 1.0),
         subsurface: glm::vec4(0.0),
-        specular_tint: glm::vec4(0.0,0.0,1.0,1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,1.0),
         emission_color: glm::vec4(0.0),
-        roughness: 0.1,
+        roughness: 0.0,
         metallic: 0.0,
         ior: 1.5,
         trs_weight: 0.0,
@@ -208,7 +227,25 @@ void Scene::addSphere(Sphere s){
     sphereVec.push_back(s);
 }
 
+/*albedo: glm::vec4(0.129, 0.388, 0.082, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0),
+        emission_color: glm::vec4(0.0),
+        roughness: 1.0,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 0.0,*/
+
 int Scene::addMaterial(Material m){
+    m.albedo = glm::clamp(m.albedo,glm::vec4(0.0),glm::vec4(1.0));
+    m.subsurface = glm::clamp(m.subsurface,glm::vec4(0.0),glm::vec4(1.0));
+    m.specular_tint = glm::clamp(m.specular_tint,glm::vec4(0.0),glm::vec4(1.0));
+    m.emission_color = glm::clamp(m.emission_color,glm::vec4(0.0),glm::vec4(1.0));
+    m.roughness = glm::clamp(m.roughness,float(0.01),float(1.0));
+    m.metallic = glm::clamp(m.metallic,float(0.0),float(1.0));
+    m.ior = glm::max(m.ior,float(0.0));
+    m.trs_weight = glm::clamp(m.trs_weight,float(0.0),float(1.0));
+
     materialVec.push_back(m);
     return materialVec.size()-1;
 }
