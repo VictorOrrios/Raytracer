@@ -152,6 +152,7 @@ private:
         int total_lights;
         float lights_strength_sum;
         glm::vec3 world_up;
+        bool reset_frame_accumulation;
     };
 
     // -------------------------------------------------------------------------
@@ -196,10 +197,13 @@ private:
     vector<VkDescriptorSet> descriptorSetsPerFrame;
     VkDescriptorSetLayout descriptorSetLayoutGlobal;
     VkDescriptorSet descriptorSetGlobal;
+    VkDescriptorSetLayout descriptorSetLayoutFrameAccum;
+    VkDescriptorSet descriptorSetFrameAccum;
     VkDescriptorPool descriptorPool; 
 
     // Push constants
     PushConstants pushConstants;
+    
 
     // UBOs
     vector<VkBuffer> uniformBuffers;
@@ -214,6 +218,12 @@ private:
     // SSBOs
     vector<VkBuffer> shaderStorageBuffers = vector<VkBuffer>(numSSBO);
     vector<VkDeviceMemory> shaderStorageBufferMemory = vector<VkDeviceMemory>(numSSBO);
+
+    // Frame accumulation buffers
+    VkBuffer colorAccumulationBuffer;
+    VkDeviceMemory colorAccumulationBufferMemory;
+    VkBuffer sampleCountBuffer;
+    VkDeviceMemory sampleCountBufferMemory;
 
     // Sync Objects
     vector<VkSemaphore> imageAvailableSemaphores;
@@ -244,6 +254,9 @@ private:
                             glm::radians(pitch),
                             glm::radians(roll)
                         );
+
+    // Tells when to reset the frame accumulation and start from zero
+    bool resetFrameAccumulation = true;
 
     
     // ---------------- Main loop ------------------------------------
@@ -300,10 +313,17 @@ private:
             vkFreeMemory(device, shaderStorageBufferMemory[i], nullptr);
         }
 
+        vkDestroyBuffer(device, colorAccumulationBuffer, nullptr);
+        vkFreeMemory(device, colorAccumulationBufferMemory, nullptr);
+
+        vkDestroyBuffer(device, sampleCountBuffer, nullptr);
+        vkFreeMemory(device, sampleCountBufferMemory, nullptr);
+
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
         vkDestroyDescriptorSetLayout(device, descriptorSetLayoutPerFrame, nullptr);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayoutGlobal, nullptr);
+        vkDestroyDescriptorSetLayout(device, descriptorSetLayoutFrameAccum, nullptr);
 
         vkDestroyPipeline(device, computePipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
@@ -364,18 +384,30 @@ private:
         if(planeMode){
             cameraPos += moveSpeedDelta * cameraFront;
         }else{
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
                 cameraPos += moveSpeedDelta * glm::normalize(cameraFront);
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+                resetFrameAccumulation = true;
+            }
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
                 cameraPos -= moveSpeedDelta * glm::normalize(cameraFront);
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+                resetFrameAccumulation = true;
+            }
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
                 cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * moveSpeedDelta;
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+                resetFrameAccumulation = true;
+            }
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
                 cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * moveSpeedDelta;
-            if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+                resetFrameAccumulation = true;
+            }
+            if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS){
                 cameraPos += moveSpeedDelta * cameraUp;
-            if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+                resetFrameAccumulation = true;
+            }
+            if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS){
                 cameraPos -= moveSpeedDelta * cameraUp;
+                resetFrameAccumulation = true;
+            }
         }
 
 
@@ -473,6 +505,8 @@ private:
 
     // Updates rotation matrix and camera front and up
     void updateCamera(){
+        resetFrameAccumulation = true;
+
         rotation = glm::yawPitchRoll(
             -glm::radians(yaw),
             glm::radians(pitch),
@@ -499,9 +533,9 @@ private:
         createUniformBuffers();
         createImageBuffer(WIDTH,HEIGHT);
         createShaderStorageBuffers();
+        createFrameAccumulationBuffers(WIDTH,HEIGHT);
         createDescriptorPool();
-        createDescriptorSetsPerFrame();
-        createDescriptorSetsGlobal();
+        createDescriptorSets(WIDTH,HEIGHT);
         createCommandBuffers();
         createSyncObjects();
     }
@@ -1068,8 +1102,8 @@ private:
 
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 2;
-        array<VkDescriptorSetLayout,2> descriptorSetLayouts = {descriptorSetLayoutPerFrame,descriptorSetLayoutGlobal};
+        pipelineLayoutInfo.setLayoutCount = 3;
+        array<VkDescriptorSetLayout,3> descriptorSetLayouts = {descriptorSetLayoutPerFrame,descriptorSetLayoutGlobal,descriptorSetLayoutFrameAccum};
         pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
 
         // Push constants set-up
@@ -1152,8 +1186,8 @@ private:
 
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 
-            array<VkDescriptorSet,2> descriptorSets= {descriptorSetsPerFrame[currentFrame],descriptorSetGlobal};
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, descriptorSets.data(), 0, 0);
+            array<VkDescriptorSet,3> descriptorSets= {descriptorSetsPerFrame[currentFrame],descriptorSetGlobal, descriptorSetFrameAccum};
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 3, descriptorSets.data(), 0, 0);
 
             vkCmdPushConstants(commandBuffer,pipelineLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(PushConstants),&pushConstants);
 
@@ -1239,6 +1273,7 @@ private:
             getWidthHeigth(width,height);
             recreateSwapChain(width,height);
             recreateOutputImage(width,height);
+            recreateFrameAccumulationBuffers(width,height);
             return;
         }
         else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -1246,7 +1281,7 @@ private:
             throw std::runtime_error("failed to acquire swap chain image!");
         }
 
-        updatePushConstants();
+        updatePushConstantsPre();
 
         updateUniformBuffer(currentFrame);
 
@@ -1254,6 +1289,8 @@ private:
 
         vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
+        updatePushConstantsPost();
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1297,6 +1334,7 @@ private:
             getWidthHeigth(width,height);
             recreateSwapChain(width,height);
             recreateOutputImage(width,height);
+            recreateFrameAccumulationBuffers(width,height);
         }
         else if (result != VK_SUCCESS)
         {
@@ -1317,8 +1355,6 @@ private:
     }
 
     void recreateOutputImage(int width, int height){
-        vkDeviceWaitIdle(device);
-
         vkDestroyImageView(device, outputImageView, nullptr);
         vkDestroyImage(device,outputImage, nullptr);
         vkFreeMemory(device, outputImageMemory, nullptr);
@@ -1327,14 +1363,29 @@ private:
         createDescriptorSetsGlobal();
     }
 
+    void recreateFrameAccumulationBuffers(int width, int height){
+        vkDestroyBuffer(device, colorAccumulationBuffer, nullptr);
+        vkFreeMemory(device, colorAccumulationBufferMemory, nullptr);
+        vkDestroyBuffer(device, sampleCountBuffer, nullptr);
+        vkFreeMemory(device, sampleCountBufferMemory, nullptr);
+
+        createFrameAccumulationBuffers(width,height);
+        createDescriptorSetsFrameAccumulation(width,height);
+    }
+
 
     // ---------------- Push constants update per each frame ------------------------------------------------
-    void updatePushConstants(){
+    void updatePushConstantsPre(){
         pushConstants.time = lastFrame;
         pushConstants.frameCount = frameCount;
         pushConstants.total_lights = scene.lightsVec.size();
         pushConstants.lights_strength_sum = scene.lights_strength_sum;
         pushConstants.world_up = worldUp;
+        pushConstants.reset_frame_accumulation = resetFrameAccumulation;
+    }
+
+    void updatePushConstantsPost(){
+        resetFrameAccumulation = false;
     }
     
     
@@ -1484,6 +1535,20 @@ private:
         vkFreeMemory(device,stagingBufferMemory,nullptr);
     }
 
+    // ---------------- Frame accumulation buffers creation ------------------------------------------------
+    void createFrameAccumulationBuffers(int width, int height){
+        VkDeviceSize imageSizeColor = width * height * sizeof(glm::vec4);
+        createBuffer(imageSizeColor, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorAccumulationBuffer, colorAccumulationBufferMemory);
+        initializeBufferWithZeros(colorAccumulationBuffer,imageSizeColor);
+        
+        VkDeviceSize imageSize = width * height * sizeof(uint32_t);
+        createBuffer(imageSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, sampleCountBuffer, sampleCountBufferMemory);        
+        initializeBufferWithZeros(sampleCountBuffer,imageSize);
+    }
+
+
     // ---------------- Descriptor layout/pool/set creation ------------------------------------------------
     void createDescriptorSetLayout()
     {
@@ -1530,12 +1595,32 @@ private:
         {
             throw runtime_error("failed to create descriptor set layout global");
         }
+
+        array<VkDescriptorSetLayoutBinding, 2> layoutBindingsC{};
+
+        for(int i = 0; i<2; i++){
+            layoutBindingsC[i].binding = i;
+            layoutBindingsC[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            layoutBindingsC[i].descriptorCount = 1;
+            layoutBindingsC[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            layoutBindingsC[i].pImmutableSamplers = nullptr;
+        }
+
+        VkDescriptorSetLayoutCreateInfo layoutInfoFrameAccumulation{};
+        layoutInfoFrameAccumulation.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfoFrameAccumulation.bindingCount = static_cast<uint32_t>(layoutBindingsC.size());
+        layoutInfoFrameAccumulation.pBindings = layoutBindingsC.data();
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfoFrameAccumulation, nullptr, &descriptorSetLayoutFrameAccum) != VK_SUCCESS)
+        {
+            throw runtime_error("failed to create descriptor set layout frame accumulation");
+        }
         
     }
 
     void createDescriptorPool()
     {
-        array<VkDescriptorPoolSize, 2+numSSBO> poolSizes{};
+        array<VkDescriptorPoolSize, 1 + 1+numSSBO + 2> poolSizes{};
 
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -1543,16 +1628,16 @@ private:
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         poolSizes[1].descriptorCount = 1;
 
-        for(int i = 2; i < 2+numSSBO; i++){
+        for(int i = 2; i < poolSizes.size(); i++){
             poolSizes[i].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             poolSizes[i].descriptorCount = 1;
         }
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = 2+numSSBO;
+        poolInfo.poolSizeCount = poolSizes.size();
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)+1+numSSBO;
+        poolInfo.maxSets = poolSizes.size()+static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)-1;
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
         {
@@ -1560,8 +1645,8 @@ private:
         }
     }
 
-    void createDescriptorSetsPerFrame()
-    {
+    void createDescriptorSets(int width, int height){
+        // Per frame
         vector<VkDescriptorSetLayout> layoutsPerFrame(MAX_FRAMES_IN_FLIGHT, descriptorSetLayoutPerFrame);
         VkDescriptorSetAllocateInfo allocInfoPerFrame{};
         allocInfoPerFrame.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1575,6 +1660,38 @@ private:
             throw runtime_error("failed to allocate descriptor sets per frame");
         }
 
+        createDescriptorSetsPerFrame();
+
+        // Global
+        VkDescriptorSetAllocateInfo allocInfoGlobal{};
+        allocInfoGlobal.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfoGlobal.descriptorPool = descriptorPool;
+        allocInfoGlobal.descriptorSetCount = 1;
+        allocInfoGlobal.pSetLayouts = &descriptorSetLayoutGlobal;
+
+        if (vkAllocateDescriptorSets(device, &allocInfoGlobal, &descriptorSetGlobal) != VK_SUCCESS)
+        {
+            throw runtime_error("failed to allocate descriptor sets global");
+        }
+
+        createDescriptorSetsGlobal();
+        
+        // Frame accumulation
+        VkDescriptorSetAllocateInfo allocInfoFrameAccum{};
+        allocInfoFrameAccum.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfoFrameAccum.descriptorPool = descriptorPool;
+        allocInfoFrameAccum.descriptorSetCount = 1;
+        allocInfoFrameAccum.pSetLayouts = &descriptorSetLayoutFrameAccum;
+
+        if (vkAllocateDescriptorSets(device, &allocInfoFrameAccum, &descriptorSetFrameAccum) != VK_SUCCESS)
+        {
+            throw runtime_error("failed to allocate descriptor sets for frame accumulation");
+        }
+
+        createDescriptorSetsFrameAccumulation(width,height);
+    }
+
+    void createDescriptorSetsPerFrame(){
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             VkDescriptorBufferInfo uniformBufferInfo{};
@@ -1595,22 +1712,9 @@ private:
 
             vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
         }
-
-        vector<VkDescriptorSetLayout> layoutsGlobal(1, descriptorSetLayoutGlobal);
-        VkDescriptorSetAllocateInfo allocInfoGlobal{};
-        allocInfoGlobal.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfoGlobal.descriptorPool = descriptorPool;
-        allocInfoGlobal.descriptorSetCount = 1;
-        allocInfoGlobal.pSetLayouts = layoutsGlobal.data();
-
-        if (vkAllocateDescriptorSets(device, &allocInfoGlobal, &descriptorSetGlobal) != VK_SUCCESS)
-        {
-            throw runtime_error("failed to allocate descriptor sets global");
-        }
     }
 
     void createDescriptorSetsGlobal(){
-
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfo.imageView = outputImageView;
@@ -1653,6 +1757,33 @@ private:
             descriptorWrites[i].pBufferInfo = &ssboInfos[i-1];
         }
 
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+
+    void createDescriptorSetsFrameAccumulation(int width, int height){
+        vector<VkDescriptorBufferInfo> ssboInfos(2);
+
+        // Spheres SSBO
+        ssboInfos[0].buffer = colorAccumulationBuffer;
+        ssboInfos[0].offset = 0;
+        ssboInfos[0].range = width * height * sizeof(glm::vec4);
+
+        // Materials SSBO
+        ssboInfos[1].buffer = sampleCountBuffer;
+        ssboInfos[1].offset = 0;
+        ssboInfos[1].range = width * height * sizeof(uint32_t);
+
+
+        array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        for(int i = 0; i < descriptorWrites.size(); i++){
+            descriptorWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[i].dstSet = descriptorSetFrameAccum;
+            descriptorWrites[i].dstBinding = i;
+            descriptorWrites[i].dstArrayElement = 0;
+            descriptorWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[i].descriptorCount = 1;
+            descriptorWrites[i].pBufferInfo = &ssboInfos[i];
+        }
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
@@ -1746,6 +1877,30 @@ private:
         copyRegion.size = size;
         vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
         
+        endSingleTimeCommands(commandBuffer);
+    }
+
+    // Fills the buffer with zeros up to size
+    void initializeBufferWithZeros(VkBuffer buffer, VkDeviceSize size) {
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        vkCmdFillBuffer(commandBuffer, buffer, 0, size, 0);
+
+        VkBufferMemoryBarrier barrier = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+            .buffer = buffer,
+            .offset = 0,
+            .size = size
+        };
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 0, nullptr, 1, &barrier, 0, nullptr
+        );
+
         endSingleTimeCommands(commandBuffer);
     }
 

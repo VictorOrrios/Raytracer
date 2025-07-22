@@ -96,8 +96,8 @@ struct Hit{
 };
 
 // ------------ Constant definitions --------------
-const int rays_per_pixel = 20;
-const int max_bounces = 5;
+const int rays_per_pixel = 5;
+const int max_bounces = 20;
 
 
 const float PINF = 1.0 / 0.0;
@@ -112,6 +112,7 @@ layout(push_constant) uniform PushConstants {
     int total_lights;
     float lights_strength_sum;
     vec3 world_up;
+    bool reset_frame_accumulation;
 } pc;
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
@@ -130,6 +131,14 @@ layout(set = 1, std430, binding = 2) buffer MaterialsSSBOOut {
 
 layout(set = 1, std430, binding = 3) buffer LightsSSBOOut {
     Light lights[];
+};
+
+layout(set = 2, std430, binding = 0) buffer ColorAccumulationSSBOInOut {
+    vec4 accumulated_colors[];
+};
+
+layout(set = 2, std430, binding = 1) buffer SampleCountSSBOInOut {
+    int sample_counts[];
 };
 
 // ------------ Workgroup sizes --------------
@@ -669,7 +678,17 @@ void main() {
 
     // Gamma correction
     color = vec4(pow(color.xyz, vec3(1.0/2.2)), 1.0);
-    
+
+    // Frame accumulation
+    uint idx = pixelCoords.y * imageSize.x + pixelCoords.x;
+    if (pc.reset_frame_accumulation) {
+        accumulated_colors[idx] = vec4(0.0);
+        sample_counts[idx] = 0;
+    }
+    accumulated_colors[idx] += color;
+    sample_counts[idx] += 1;
+    vec4 final_color = accumulated_colors[idx] / max(1, sample_counts[idx]);
+
     // Store color
-    imageStore(outputImage, pixelCoords, color.zyxw);
+    imageStore(outputImage, pixelCoords, final_color.zyxw);
 }
