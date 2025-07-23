@@ -88,6 +88,8 @@ const float rollInitial = 0.0f;
 // Turn the controls from 6 degrees of movement to the controls of a plane
 const bool planeMode = false;
 
+// Initial value for the toggle that indicates if the frame accumulation must be on
+const bool frameAccumulationInitial = true;
 
 
 // -----------------------------------------------------------------------------
@@ -255,8 +257,9 @@ private:
                             glm::radians(roll)
                         );
 
-    // Tells when to reset the frame accumulation and start from zero
+    // Frame accumulation
     bool resetFrameAccumulation = true;
+    bool frameAccumulationOn = frameAccumulationInitial;
 
     
     // ---------------- Main loop ------------------------------------
@@ -272,7 +275,7 @@ private:
             glfwPollEvents();
             processInput(window, deltaTime);
             drawFrame();
-            if(enableValidationLayers) showFPS();
+            showFPS();
         }
 
         vkDeviceWaitIdle(device);
@@ -433,7 +436,17 @@ private:
             cameraPos = cameraPositionInitial;
             fov = fovInitial;
             rotateMatrix = true;
+            frameAccumulationOn = frameAccumulationInitial;
         }
+
+        static bool xBounce = false;
+        if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS && !xBounce){
+            frameAccumulationOn = !frameAccumulationOn;
+            xBounce = true;
+        } 
+        if (glfwGetKey(window, GLFW_KEY_X) == GLFW_RELEASE && xBounce){
+            xBounce = false;
+        } 
 
         if(rotateMatrix){
             if(roll>360.0) roll -= 360.0;
@@ -500,6 +513,7 @@ private:
         fov -= static_cast<float>(yoffset)*fovIncreaseAmount;
         if(fov < 1.0) fov = 1.0;
         if(fov > 160.0) fov = 160.0;
+        resetFrameAccumulation = true;
     }
 
 
@@ -1381,7 +1395,11 @@ private:
         pushConstants.total_lights = scene.lightsVec.size();
         pushConstants.lights_strength_sum = scene.lights_strength_sum;
         pushConstants.world_up = worldUp;
-        pushConstants.reset_frame_accumulation = resetFrameAccumulation;
+        if(frameAccumulationOn){
+            pushConstants.reset_frame_accumulation = resetFrameAccumulation;
+        }else{
+            pushConstants.reset_frame_accumulation = true;
+        }
     }
 
     void updatePushConstantsPost(){
@@ -2094,8 +2112,10 @@ private:
             double fps = frameCount / delta;
             //cout << "FPS: " << fps << endl;
             
-            string title = "Vulkan App - FPS: " + to_string((int)fps);
-            glfwSetWindowTitle(window, title.c_str());
+            if(enableValidationLayers){
+                string title = "Vulkan App - FPS: " + to_string((int)fps);
+                glfwSetWindowTitle(window, title.c_str());
+            }
             
             frameCount = 0;
             lastTime = currentTime;

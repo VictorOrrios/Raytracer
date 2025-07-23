@@ -52,27 +52,27 @@ struct Light{
 };
 
 struct Material{
-    vec4 albedo;           // Surface color rgb. Alpha controls opacity: 0.0 = transparent 1.0 = opaque
+    vec4 albedo;            // Surface color rgb. Alpha controls opacity: 0.0 = transparent 1.0 = opaque
 
     // Subsurface | Method: Christensen-Burley
-    vec4 subsurface;       // Average distance the ligths scatter below the surface
-                                // Alpha controls weight: 0.0 = diffuse , 1.0 = subsurface
+    vec4 subsurface;        // Average distance the ligths scatter below the surface
+                            // Alpha controls weight: 0.0 = diffuse , 1.0 = subsurface
 
     // Specular | Method: GGX
-    vec4 specular_tint;    // Color tint for specular and metalic relfections
-                                // Alpha controls IOR Level: 
-                                // 0.0 = no reflections , 0.5 = no adjustment, 1.0 = double reflections
+    vec4 specular_tint;     // Color tint for specular and metalic relfections
+                            // Alpha controls IOR Level: 
+                            // 0.0 = no reflections , 0.5 = no adjustment, 1.0 = double reflections
 
     // Emission
-    vec4 emission_color;   // Color of the light emited. Alpha controls strength
+    vec4 emission_color;    // Color of the light emited. Alpha controls strength
 
     // General
-    float roughness;            // 0.0 = smooth , 1.0 = rough
-    float metallic;             // 0.0 = dielectric , 1.0 = metalic
-    float ior;                  // Index of refraction
+    float roughness;        // 0.0 = smooth , 1.0 = rough
+    float metallic;         // 0.0 = dielectric , 1.0 = metalic
+    float ior;              // Index of refraction
 
     // Transmission
-    float trs_weight;           // 0.0 = opaque , 1.0 = transmisive
+    float trs_weight;       // 0.0 = opaque , 1.0 = transmisive
 
     // Coat
     // TODO
@@ -358,9 +358,14 @@ vec4 skybox_color_white(Ray r){
     return vec4(1.0);
 }
 
+// Skybox variation for just a black sky
+vec4 skybox_color_black(Ray r){
+    return vec4(0.0);
+}
+
 // Color of the skybox where the ray is pointing to
 vec4 skybox_color(Ray r) {
-    return skybox_color_day(r);
+    return skybox_color_night(r);
 }
 
 
@@ -387,11 +392,31 @@ vec3 sample_light(vec3 point, vec3 normal, out vec3 L, out float pdf){
     switch(picked_light.type){
         case AMBIENT:
             L = random_vec_on_hemisphere(normal);
-            pdf = picked_light.color_str.a / pc.lights_strength_sum;
+            pdf = 1 / 2.0 / PI;
             return picked_light.color_str.rgb;
             break;
         case SPHERE:
-
+            vec3 center = picked_light.pos_angle_aux.xyz;
+            float radius = picked_light.pos_angle_aux.w;
+            vec3 center_to_point = point-center;
+            vec3 sphere_point = random_vec_on_hemisphere(normalize(center_to_point)) * radius + center;
+            vec3 point_to_spoint = sphere_point-point;
+            float d_to_spoint = length(point_to_spoint);
+            L = normalize(point_to_spoint);
+            Ray s_ray = Ray(point,L);
+            Hit h;
+            Interval i = Interval(0.005, PINF);
+            if(hit_scene(s_ray,i,h)){
+                //if(abs(d_to_spoint - h.t) < 0.1){
+                if(true){
+                    float d2 = d_to_spoint*d_to_spoint;
+                    pdf = 1 / 2.0 / PI;
+                    return clamp(picked_light.color_str.rgb  / d2,0.0,1.0);
+                }
+            }
+            L = normal;
+            pdf = 0.00001;
+            return vec3(0.0);
             break;
         case POINT:
 
@@ -470,8 +495,11 @@ int sample_lobe(const Material mat) {
 }
 
 
-
-
+float power_heuristics(float a, float b){
+    float x = a*a;
+    float y = b*b;
+    return x / (x+y);
+}
 
 // Fresnel-Schlick aproximation to reflectance
 float reflectance(float cos_theta, float ref_idx) {
@@ -573,7 +601,7 @@ vec3 sample_mat(Material mat, vec3 V, vec3 N){
 
 
 // Computes direct lighting contribution at a hit point
-vec3 direct_light(Hit rec, Ray ray){
+vec3 direct_light(Hit rec, Ray ray, float pdf){
     vec3 L_emission, L_dir, fr;
     float cos_theta, light_pdf, mat_pdf;
 
@@ -581,7 +609,9 @@ vec3 direct_light(Hit rec, Ray ray){
     cos_theta = max(0.0,dot(rec.normal,L_dir));
     fr = eval_mat(materials[rec.mat], L_dir, -ray.dir, rec, mat_pdf);
 
-    return clamp(L_emission * fr * cos_theta / light_pdf, 0.0, 1.0);
+    pdf = power_heuristics(light_pdf,mat_pdf);
+
+    return clamp(L_emission * fr * cos_theta / pdf, 0.0, 1.0);
 }
 
 
@@ -602,9 +632,11 @@ vec4 ray_color(Ray r){
             }
 
             // Get the direct light contribution
-            color += direct_light(h,r) * attenuation; 
+            float light_pdf;
+            vec3 debug = direct_light(h,r,light_pdf);
+            color += debug * attenuation; 
 
-            // Last iteration only has direct light
+            // Last iteration doesn't need to calculate attenuation or next ray
             if(bounce < max_bounces){
                 // Get the indirect light contribution
                 vec3 bounce_dir = sample_mat(mat, -r.dir, h.normal);

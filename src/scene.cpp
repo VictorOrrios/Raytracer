@@ -24,27 +24,32 @@ Scene::Scene(){
     // Add skybox to light list
 
     // Sun
+    /*
     addLight({
         pos_angle_aux: glm::vec4(0.33, -0.67, 0.67,0.0),
         color_str: glm::vec4(1.0,1.0,1.0,5.0),
         type: DIRECTIONAL
     });
+    */
 
     // Daylight
+    /*
     addLight({
         pos_angle_aux: glm::vec4(0.0,0.0,0.0,0.0),
         color_str: glm::vec4(0.231, 0.756, 0.945,1.0),
         type: AMBIENT
     });
+    */
 
     // Moon
     /*
     addLight({
         pos_angle_aux: glm::vec4(-0.33, -0.67, 0.67,0.0),
-        color_str: glm::vec4(0.1,0.1,0.1,sunStrength),
+        color_str: glm::vec4(0.1,0.1,0.1,5.0),
         type: DIRECTIONAL
     });
     */
+    
 
 
     int ground = addMaterial({
@@ -69,6 +74,17 @@ Scene::Scene(){
         trs_weight: 0.0,
     });
 
+    int blueLight = addMaterial({
+        albedo: glm::vec4(1.0, 0.0, 0.0, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,1.0),
+        emission_color: glm::vec4(0, 1, 0.984, 1.0),
+        roughness: 0.0,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
     // Ground sphere
     addSphere({
         pos: glm::vec3(0.0,-1000.0,-10.0),
@@ -82,7 +98,11 @@ Scene::Scene(){
         mat: redMatte
     });
 
-
+    addSphere({
+        pos: glm::vec3(3.0,0.0,-10.0),
+        r: 1.0,
+        mat: blueLight
+    });
 
     /*
 
@@ -212,6 +232,7 @@ Scene::Scene(){
     std::cout<<"Number of spheres: "<<sphereVec.size()<<std::endl;
     std::cout<<"Number of materials: "<<materialVec.size()<<std::endl;
     std::cout<<"Number of lights: "<<lightsVec.size()<<std::endl;
+    std::cout<<"Light 1: "<<lightsVec[0].color_str.r<<","<<lightsVec[0].color_str.g<<","<<lightsVec[0].color_str.b<<","<<lightsVec[0].color_str.a<<std::endl;
 }
 
 void Scene::addSphere(Sphere s){
@@ -236,11 +257,16 @@ void Scene::addSphere(Sphere s){
         ior: 1.5,
         trs_weight: 0.0,*/
 
+glm::vec4 clampXYZ(glm::vec4 v, float min, float max){
+    glm::vec3 clamped = glm::clamp(glm::vec3(v),glm::vec3(min),glm::vec3(max));
+    return glm::vec4(clamped, v.a);
+}
+
 int Scene::addMaterial(Material m){
     m.albedo = glm::clamp(m.albedo,glm::vec4(0.0),glm::vec4(1.0));
     m.subsurface = glm::clamp(m.subsurface,glm::vec4(0.0),glm::vec4(1.0));
     m.specular_tint = glm::clamp(m.specular_tint,glm::vec4(0.0),glm::vec4(1.0));
-    m.emission_color = glm::clamp(m.emission_color,glm::vec4(0.0),glm::vec4(1.0));
+    m.emission_color = clampXYZ(m.emission_color,0.0,1.0);
     m.roughness = glm::clamp(m.roughness,float(0.01),float(1.0));
     m.metallic = glm::clamp(m.metallic,float(0.0),float(1.0));
     m.ior = glm::max(m.ior,float(0.0));
