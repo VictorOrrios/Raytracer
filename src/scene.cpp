@@ -24,13 +24,13 @@ Scene::Scene(){
     // Add skybox to light list
 
     // Sun
-    /*
+    
     addLight({
         pos_angle_aux: glm::vec4(0.33, -0.67, 0.67,0.0),
         color_str: glm::vec4(1.0,1.0,1.0,5.0),
         type: DIRECTIONAL
     });
-    */
+    
 
     // Daylight
     /*
@@ -68,8 +68,19 @@ Scene::Scene(){
         subsurface: glm::vec4(0.0),
         specular_tint: glm::vec4(1.0,1.0,1.0,1.0),
         emission_color: glm::vec4(0.0),
-        roughness: 0.0,
+        roughness: 0.7,
         metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
+    int gold = addMaterial({
+        albedo: glm::vec4(1.000,0.720,0.315, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.000,0.973,0.597,1.0),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 1.0,
         ior: 1.5,
         trs_weight: 0.0,
     });
@@ -78,7 +89,7 @@ Scene::Scene(){
         albedo: glm::vec4(1.0, 0.0, 0.0, 1.0),
         subsurface: glm::vec4(0.0),
         specular_tint: glm::vec4(1.0,1.0,1.0,1.0),
-        emission_color: glm::vec4(0, 1, 0.984, 1.0),
+        emission_color: glm::vec4(0, 1, 0.984, 4.0),
         roughness: 0.0,
         metallic: 0.0,
         ior: 1.5,
@@ -99,10 +110,11 @@ Scene::Scene(){
     });
 
     addSphere({
-        pos: glm::vec3(3.0,0.0,-10.0),
+        pos: glm::vec3(-3.0,0.0,-10.0),
         r: 1.0,
-        mat: blueLight
+        mat: gold
     });
+
 
     /*
 
@@ -267,7 +279,7 @@ int Scene::addMaterial(Material m){
     m.subsurface = glm::clamp(m.subsurface,glm::vec4(0.0),glm::vec4(1.0));
     m.specular_tint = glm::clamp(m.specular_tint,glm::vec4(0.0),glm::vec4(1.0));
     m.emission_color = clampXYZ(m.emission_color,0.0,1.0);
-    m.roughness = glm::clamp(m.roughness,float(0.01),float(1.0));
+    m.roughness = glm::clamp(m.roughness,float(0.005),float(1.0));
     m.metallic = glm::clamp(m.metallic,float(0.0),float(1.0));
     m.ior = glm::max(m.ior,float(0.0));
     m.trs_weight = glm::clamp(m.trs_weight,float(0.0),float(1.0));

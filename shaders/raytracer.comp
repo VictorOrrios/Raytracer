@@ -365,7 +365,7 @@ vec4 skybox_color_black(Ray r){
 
 // Color of the skybox where the ray is pointing to
 vec4 skybox_color(Ray r) {
-    return skybox_color_night(r);
+    return skybox_color_day(r);
 }
 
 
@@ -411,7 +411,7 @@ vec3 sample_light(vec3 point, vec3 normal, out vec3 L, out float pdf){
                 if(true){
                     float d2 = d_to_spoint*d_to_spoint;
                     pdf = 1 / 2.0 / PI;
-                    return clamp(picked_light.color_str.rgb  / d2,0.0,1.0);
+                    return clamp(picked_light.color_str.rgb * picked_light.color_str.a / d2,0.0,1.0);
                 }
             }
             L = normal;
@@ -496,16 +496,21 @@ int sample_lobe(const Material mat) {
 
 
 float power_heuristics(float a, float b){
-    float x = a*a;
-    float y = b*b;
-    return x / (x+y);
+    float a2 = a*a;
+    float b2 = b*b;
+    return a2 / max((a2+b2),0.000001);
+}
+
+float balance_heuristics(float a, float b){
+    return a / max((a+b),0.000001);
 }
 
 // Fresnel-Schlick aproximation to reflectance
-float reflectance(float cos_theta, float ref_idx) {
-    float F0 = (1.0 - ref_idx) / (1.0 + ref_idx);
-    F0 = F0 * F0;
-    return F0 + (1.0 - F0) * pow(1.0 - cos_theta, 5.0);
+float reflectance(float cos_theta, float F0) {
+    return clamp(F0 + (1.0 - F0) * pow(1.0 - cos_theta, 5.0), 0.0, 1.0);
+}
+vec3 reflectance(float cos_theta, vec3 F0) {
+    return clamp(F0 + (1.0 - F0) * pow(1.0 - cos_theta, 5.0), 0.0, 1.0);
 }
 
 // Normal distribution function. GGX
@@ -574,15 +579,19 @@ vec3 eval_mat(Material mat, vec3 L, vec3 V, Hit rec, out float pdf){
     float NdotV = clamp(dot(V,N),0.0,1.0);
     
     float ri = rec.front_face ? (1.0/mat.ior) : mat.ior;
-    float ks = clamp(reflectance(NdotV, ri), 0.0, 1.0);
-    float kd = 1.0 - ks;
-
+    float dielectric_F0 = (1.0 - ri) / (1.0 + ri);
+    vec3 dielectric_F0_vec = vec3(dielectric_F0*dielectric_F0);
+    vec3 F0 = mix(dielectric_F0_vec, mat.albedo.xyz, mat.metallic); // Base reflectivity
+    
     vec3 f_diffuse = mat.albedo.xyz / PI;
 
     float alpha = mat.roughness * mat.roughness;
     float D = ggx_distribution(alpha,N,H);
     float G = G1_CT(L,N,alpha) * G1_CT(V,N,alpha);
-    float F = ks;
+    vec3  F = clamp(reflectance(NdotV, F0), 0.0, 1.0);
+
+    float ks = max(max(F.r, F.g), F.b);
+    float kd = (1.0 - ks) * (1.0 - mat.metallic);
     
     vec3 f_specular = mat.specular_tint.rgb * D*G*F / max(0.00001,(4.0*NdotV*NdotL));
 
@@ -633,22 +642,18 @@ vec4 ray_color(Ray r){
 
             // Get the direct light contribution
             float light_pdf;
-            vec3 debug = direct_light(h,r,light_pdf);
-            color += debug * attenuation; 
+            color += direct_light(h,r,light_pdf) * attenuation; 
 
-            // Last iteration doesn't need to calculate attenuation or next ray
-            if(bounce < max_bounces){
-                // Get the indirect light contribution
-                vec3 bounce_dir = sample_mat(mat, -r.dir, h.normal);
-                float mat_pdf;
-                vec3 fr = eval_mat(mat,bounce_dir,-r.dir,h,mat_pdf);
-                float cos_theta = max(0.0, dot(h.normal, bounce_dir));
-                attenuation *= max(vec3(0.0),fr * cos_theta / max(0.00001,mat_pdf));
+            // Get the indirect light contribution
+            vec3 bounce_dir = sample_mat(mat, -r.dir, h.normal);
+            float mat_pdf;
+            vec3 fr = eval_mat(mat,bounce_dir,-r.dir,h,mat_pdf);
+            float cos_theta = max(0.0, dot(h.normal, bounce_dir));
+            attenuation *= max(vec3(0.0),fr * cos_theta / max(0.00001,mat_pdf));
 
-                // Prepare next ray to cast
-                r.orig = h.p;
-                r.dir = bounce_dir;
-            }
+            // Prepare next ray to cast
+            r.orig = h.p;
+            r.dir = bounce_dir;
         } else {
             // Ray has hit the skybox
             color += attenuation * skybox_color(r).rgb;
