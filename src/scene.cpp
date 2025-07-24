@@ -55,7 +55,7 @@ Scene::Scene(){
     int ground = addMaterial({
         albedo: glm::vec4(0.129, 0.388, 0.082, 1.0),
         subsurface: glm::vec4(0.0),
-        specular_tint: glm::vec4(1.0),
+        specular_tint: glm::vec4(0.0),
         emission_color: glm::vec4(0.0),
         roughness: 1.0,
         metallic: 0.0,
@@ -66,9 +66,9 @@ Scene::Scene(){
     int redMatte = addMaterial({
         albedo: glm::vec4(1.0, 0.0, 0.0, 1.0),
         subsurface: glm::vec4(0.0),
-        specular_tint: glm::vec4(1.0,1.0,1.0,1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
         emission_color: glm::vec4(0.0),
-        roughness: 0.7,
+        roughness: 0.8,
         metallic: 0.0,
         ior: 1.5,
         trs_weight: 0.0,
@@ -77,7 +77,7 @@ Scene::Scene(){
     int gold = addMaterial({
         albedo: glm::vec4(1.000,0.720,0.315, 1.0),
         subsurface: glm::vec4(0.0),
-        specular_tint: glm::vec4(1.000,0.973,0.597,1.0),
+        specular_tint: glm::vec4(1.000,0.973,0.597,0.5),
         emission_color: glm::vec4(0.0),
         roughness: 0.0,
         metallic: 1.0,
@@ -88,7 +88,7 @@ Scene::Scene(){
     int blueLight = addMaterial({
         albedo: glm::vec4(1.0, 0.0, 0.0, 1.0),
         subsurface: glm::vec4(0.0),
-        specular_tint: glm::vec4(1.0,1.0,1.0,1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
         emission_color: glm::vec4(0, 1, 0.984, 4.0),
         roughness: 0.0,
         metallic: 0.0,
