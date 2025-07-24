@@ -584,7 +584,7 @@ vec3 eval_mat(Material mat, vec3 L, vec3 V, Hit rec, out float pdf){
     float dielectric_F0 = (1.0 - ri) / (1.0 + ri);
     vec3 dielectric_F0_vec = vec3(dielectric_F0*dielectric_F0);
 
-    vec3 F0 = mix(dielectric_F0_vec, mat.albedo.xyz, mat.metallic); // Base reflectivity
+    vec3 F0 = mix(dielectric_F0_vec, mat.albedo.xyz, mat.metallic);
     
     vec3 f_diffuse = mat.albedo.xyz / PI;
 
@@ -636,6 +636,12 @@ vec4 ray_color(Ray r){
     for (int bounce = 0; bounce <= max_bounces; bounce++) {
         if (hit_scene(r, Interval(0.005, PINF), h)) {
             Material mat = materials[h.mat];
+
+            // Transparency check
+            if(mat.albedo.a < 1.0 && mat.albedo.a < random()){
+                r.orig = h.p;
+                continue;
+            }
 
             // If material is emissive stop casting
             if(mat.emission_color.a > 0.0){
