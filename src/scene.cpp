@@ -24,13 +24,13 @@ Scene::Scene(){
     // Add skybox to light list
 
     // Sun
-    
+    /*
     addLight({
         pos_angle_aux: glm::vec4(0.33, -0.67, 0.67,0.0),
         color_str: glm::vec4(1.0,1.0,1.0,5.0),
         type: DIRECTIONAL
     });
-    
+    */
 
     // Daylight
     /*
@@ -42,13 +42,13 @@ Scene::Scene(){
     */
 
     // Moon
-    /*
+    
     addLight({
         pos_angle_aux: glm::vec4(-0.33, -0.67, 0.67,0.0),
         color_str: glm::vec4(0.1,0.1,0.1,5.0),
         type: DIRECTIONAL
     });
-    */
+    
     
 
 
@@ -68,7 +68,7 @@ Scene::Scene(){
         subsurface: glm::vec4(0.0),
         specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
         emission_color: glm::vec4(0.0),
-        roughness: 0.8,
+        roughness: 0.5,
         metallic: 0.0,
         ior: 1.5,
         trs_weight: 0.0,
@@ -80,8 +80,8 @@ Scene::Scene(){
         specular_tint: glm::vec4(1.000,0.973,0.597,0.5),
         emission_color: glm::vec4(0.0),
         roughness: 0.0,
-        metallic: 1.0,
-        ior: 1.5,
+        metallic: 0.0,
+        ior: 0.47,
         trs_weight: 0.0,
     });
 
@@ -96,6 +96,128 @@ Scene::Scene(){
         trs_weight: 0.0,
     });
 
+    int cloudyGlass = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 0.0,
+        ior: 1.52,
+        trs_weight: 1.0,
+    });
+
+    int blueMatte = addMaterial({
+        albedo: glm::vec4(0.208, 0.612, 0.8, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.2,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
+    int redMetal = addMaterial({
+        albedo: glm::vec4(0.82, 0.118, 0.118, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.8,
+        metallic: 1.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
+    int yellowMetal = addMaterial({
+        albedo: glm::vec4(0.945, 0.949, 0.212, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.1,
+        metallic: 1.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
+    int dielectric075 = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 0.0,
+        ior: 0.75,
+        trs_weight: 1.0,
+    });
+
+    int dielectric133 = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 0.0,
+        ior: 1.33,
+        trs_weight: 1.0,
+    });
+
+    int glass = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 1.0,
+    });
+
+    int mirror = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 1.0,
+        ior: 1.33,
+        trs_weight: 0.0,
+    });
+
+    int white_ligth = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(1.0,1.0,1.0,4.0),
+        roughness: 0.0,
+        metallic: 1.0,
+        ior: 1.33,
+        trs_weight: 0.0,
+    });
+
+    int blue_ligth = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.101, 0.643, 0.835,4.0),
+        roughness: 0.0,
+        metallic: 1.0,
+        ior: 1.33,
+        trs_weight: 0.0,
+    });
+
+    int warm_ligth = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.984, 0.882, 0.337,4.0),
+        roughness: 0.0,
+        metallic: 1.0,
+        ior: 1.33,
+        trs_weight: 0.0,
+    });
+
+    
     // Ground sphere
     addSphere({
         pos: glm::vec3(0.0,-1000.0,-10.0),
@@ -103,6 +225,7 @@ Scene::Scene(){
         mat: ground
     });
 
+    /*
     addSphere({
         pos: glm::vec3(0.0,0.0,-10.0),
         r: 1.0,
@@ -114,6 +237,14 @@ Scene::Scene(){
         r: 1.0,
         mat: gold
     });
+
+    addSphere({
+        pos: glm::vec3(3.0,0.0,-10.0),
+        r: 1.0,
+        mat: cloudyGlass
+    });
+
+    */
 
 
     /*
@@ -164,7 +295,7 @@ Scene::Scene(){
     
     
 
-    /*
+    
 
     addSphere({
         pos: glm::vec3(0.0,0.0,-10.0),
@@ -220,6 +351,7 @@ Scene::Scene(){
         mat: dielectric075
     });
 
+    
     addSphere({
         pos: glm::vec3(-2.5,-0.7,-6.0),
         r: 0.3,
@@ -238,7 +370,7 @@ Scene::Scene(){
         mat: blue_ligth
     });
 
-    */
+    
 
     std::cout<<"Scene loaded"<<std::endl;
     std::cout<<"Number of spheres: "<<sphereVec.size()<<std::endl;
@@ -260,15 +392,6 @@ void Scene::addSphere(Sphere s){
     sphereVec.push_back(s);
 }
 
-/*albedo: glm::vec4(0.129, 0.388, 0.082, 1.0),
-        subsurface: glm::vec4(0.0),
-        specular_tint: glm::vec4(1.0),
-        emission_color: glm::vec4(0.0),
-        roughness: 1.0,
-        metallic: 0.0,
-        ior: 1.5,
-        trs_weight: 0.0,*/
-
 glm::vec4 clampXYZ(glm::vec4 v, float min, float max){
     glm::vec3 clamped = glm::clamp(glm::vec3(v),glm::vec3(min),glm::vec3(max));
     return glm::vec4(clamped, v.a);
@@ -282,6 +405,7 @@ int Scene::addMaterial(Material m){
     m.roughness = glm::clamp(m.roughness,float(0.005),float(1.0));
     m.metallic = glm::clamp(m.metallic,float(0.0),float(1.0));
     m.ior = glm::max(m.ior,float(0.0));
+    if(m.ior == 1.0) m.ior = 1.00001;
     m.trs_weight = glm::clamp(m.trs_weight,float(0.0),float(1.0));
 
     materialVec.push_back(m);
