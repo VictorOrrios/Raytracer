@@ -24,31 +24,27 @@ Scene::Scene(){
     // Add skybox to light list
 
     // Sun
-    /*
     addLight({
         pos_angle_aux: glm::vec4(0.33, -0.67, 0.67,0.0),
         color_str: glm::vec4(1.0,1.0,1.0,5.0),
         type: DIRECTIONAL
     });
-    */
 
     // Daylight
-    /*
     addLight({
         pos_angle_aux: glm::vec4(0.0,0.0,0.0,0.0),
         color_str: glm::vec4(0.231, 0.756, 0.945,1.0),
         type: AMBIENT
     });
-    */
 
     // Moon
-    
+    /*
     addLight({
         pos_angle_aux: glm::vec4(-0.33, -0.67, 0.67,0.0),
         color_str: glm::vec4(0.1,0.1,0.1,5.0),
         type: DIRECTIONAL
     });
-    
+    */
     
 
 
@@ -351,7 +347,6 @@ Scene::Scene(){
         mat: dielectric075
     });
 
-    
     addSphere({
         pos: glm::vec3(-2.5,-0.7,-6.0),
         r: 0.3,
@@ -376,7 +371,28 @@ Scene::Scene(){
     std::cout<<"Number of spheres: "<<sphereVec.size()<<std::endl;
     std::cout<<"Number of materials: "<<materialVec.size()<<std::endl;
     std::cout<<"Number of lights: "<<lightsVec.size()<<std::endl;
-    std::cout<<"Light 1: "<<lightsVec[0].color_str.r<<","<<lightsVec[0].color_str.g<<","<<lightsVec[0].color_str.b<<","<<lightsVec[0].color_str.a<<std::endl;
+    for(auto i: lightsVec){
+        printLight(i);
+    }
+}
+
+void Scene::printLight(const Light& light) {
+    std::cout << "Light {\n";
+    std::cout << "  pos_angle_aux: ("
+              << light.pos_angle_aux.x << ", "
+              << light.pos_angle_aux.y << ", "
+              << light.pos_angle_aux.z << ", "
+              << light.pos_angle_aux.w << ")\n";
+    
+    std::cout << "  color_str: ("
+              << light.color_str.r << ", "
+              << light.color_str.g << ", "
+              << light.color_str.b << ", "
+              << light.color_str.a << ")\n";
+
+    std::cout << "  type: " << light.type << "\n";
+    std::cout << "  accumulated_str: " << light.accumulated_str << "\n";
+    std::cout << "}\n";
 }
 
 void Scene::addSphere(Sphere s){

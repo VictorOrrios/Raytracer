@@ -3,7 +3,6 @@
 
 #define PI 3.14159265359
 #define FLT_MIN 1.175494e-38
-#define AIR_REF_INDEX 1.000293
 
 #define DIFFUSE         0
 #define SUBSURFACE      1
@@ -406,7 +405,7 @@ vec4 skybox_color_black(Ray r){
 
 // Color of the skybox where the ray is pointing to
 vec4 skybox_color(Ray r) {
-    return skybox_color_night(r);
+    return skybox_color_day(r);
 }
 
 
@@ -664,16 +663,7 @@ vec3 eval_btdf(Material mat, vec3 L, vec3 V, Hit rec, out float pdf){
 
     pdf = D * abs(NoH) * jacobian;
 
-    float debug =  x*jacobian * D*G*(1.0-F);
-
-    return mat.subsurface.rgb * debug;
-
-    float test = debug;
-    if(test>1.0) return vec3(1.0,0.0,0.0);
-    if(test<0.0) return vec3(0.0,1.0,0.0);
-    if(test == 1.0) return vec3(1.0,1.0,0.0);
-    if(test == 0.0) return vec3(0.0,0.0,1.0);
-    return vec3(test);
+    return mat.subsurface.rgb *  x*jacobian * D*G*(1.0-F);;
 }
 
 
@@ -733,14 +723,10 @@ vec4 ray_color(Ray r){
 
             // Get the indirect light contribution
             vec3 bounce_dir = sample_mat(mat, -r.dir, h);
-            //return vec4(bounce_dir,1.0);
             float mat_pdf;
             vec3 fr = eval_mat(mat,bounce_dir,-r.dir,h,mat_pdf);
-            //return vec4(fr,1.0);
             float cos_theta = abs(dot(h.normal, bounce_dir));
-            vec3 debug = max(vec3(0.0),fr * cos_theta / max(0.00001,mat_pdf));
-            //return vec4(debug,1.0);
-            attenuation *= debug;
+            attenuation *= max(vec3(0.0),fr * cos_theta / max(0.00001,mat_pdf));
 
             // Prepare next ray to cast
             r.orig = h.p;

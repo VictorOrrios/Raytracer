@@ -49,7 +49,8 @@ struct Material {
     // TODO
 };
 
-struct Light{
+
+struct alignas(16) Light{
     glm::vec4 pos_angle_aux;
     glm::vec4 color_str;
     int type;
@@ -68,6 +69,7 @@ private:
     void addSphere(Sphere s);
     int addMaterial(Material m);
     void addLight(Light l);
+    void printLight(const Light& light);
 };
 
 
