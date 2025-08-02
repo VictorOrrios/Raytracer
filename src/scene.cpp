@@ -163,7 +163,7 @@ Scene::Scene(){
         subsurface: glm::vec4(1.0),
         specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
         emission_color: glm::vec4(0.0),
-        roughness: 0.0,
+        roughness: 0.3,
         metallic: 0.0,
         ior: 1.5,
         trs_weight: 1.0,
@@ -220,6 +220,7 @@ Scene::Scene(){
         r: 999.0,
         mat: ground
     });
+
 
     /*
     addSphere({
@@ -365,6 +366,14 @@ Scene::Scene(){
         mat: blue_ligth
     });
 
+    addTriangle({
+        v0: glm::vec3(0.0,-1.0,-5.0),
+        v1: glm::vec3(2.5,2.0,-5.0),
+        v2: glm::vec3(-2.5,2.0,-5.0),
+        mat: glass
+    });
+
+
     
 
     std::cout<<"Scene loaded"<<std::endl;
@@ -438,4 +447,11 @@ void Scene::addLight(Light l){
     lightsVec.push_back(l);
 
     lights_strength_sum += l.color_str.a;
+}
+
+void Scene::addTriangle(Triangle t){
+    glm::vec3 edge1 = t.v1 - t.v0;
+    glm::vec3 edge2 = t.v2 - t.v0;
+    t.normal = glm::normalize(glm::cross(edge1,edge2));
+    triangleVec.push_back(t);
 }

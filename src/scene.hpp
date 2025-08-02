@@ -18,6 +18,14 @@ struct alignas(16) Sphere{
     int mat;
 };
 
+struct alignas(16) Triangle{
+    alignas(16) glm::vec3 v0;
+    alignas(16) glm::vec3 v1;
+    alignas(16) glm::vec3 v2;
+    alignas(16) glm::vec3 normal;
+    int mat;
+};
+
 // Based on Blender 4.5LTS Principled BSDF
 struct Material {
     glm::vec4 albedo;           // Surface color rgb. Alpha controls opacity: 0.0 = transparent 1.0 = opaque
@@ -62,6 +70,7 @@ public:
     std::vector<Sphere> sphereVec;
     std::vector<Material> materialVec;
     std::vector<Light> lightsVec;
+    std::vector<Triangle> triangleVec;
     float lights_strength_sum = 0.0;
     
     Scene();
@@ -69,7 +78,9 @@ private:
     void addSphere(Sphere s);
     int addMaterial(Material m);
     void addLight(Light l);
+    void addTriangle(Triangle t);
     void printLight(const Light& light);
+    glm::vec3 calculateNormal(Triangle t);
 };
 
 

@@ -57,7 +57,7 @@ const vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 // Number of shader storage buffers used
-const int numSSBO = 3;
+const int numSSBO = 4;
 
 // World vetors
 const glm::vec4 worldFront = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
@@ -76,10 +76,10 @@ const float nearClip = 0.1f;
 const float farClip = 100.0f; 
 
 // Initial parameters for the camera
-const glm::vec3 cameraPositionInitial = glm::vec3(0.0f, 0.0f, -6.0f);
-const glm::vec3 cameraFrontInitial = glm::vec3(0.0f, 0.0f, -7.0f);
+const glm::vec3 cameraPositionInitial = glm::vec3(0.0f, 0.0f, -3.0f);
+const glm::vec3 cameraFrontInitial = glm::vec3(0.0f, 0.0f, -4.0f);
 const glm::vec3 cameraUpInitial = glm::vec3(worldUp);
-const glm::vec3 frontVectorTemp = cameraFrontInitial-cameraPositionInitial;
+const glm::vec3 frontVectorTemp = glm::normalize(cameraFrontInitial-cameraPositionInitial);
 const float yawInitial = glm::degrees(glm::atan(frontVectorTemp.x,-frontVectorTemp.z));
 const float pitchInitial = glm::degrees(glm::asin(frontVectorTemp.y));
 const float rollInitial = 0.0f;
@@ -1521,6 +1521,7 @@ private:
         createSSBOVector(0,scene.sphereVec);
         createSSBOVector(1,scene.materialVec);
         createSSBOVector(2,scene.lightsVec);
+        createSSBOVector(3,scene.triangleVec);
     }
 
     template <typename T>
@@ -1754,6 +1755,11 @@ private:
         ssboInfos[2].buffer = shaderStorageBuffers[2];
         ssboInfos[2].offset = 0;
         ssboInfos[2].range = sizeof(Light) * scene.lightsVec.size();
+
+        // Triangles SSBO
+        ssboInfos[3].buffer = shaderStorageBuffers[3];
+        ssboInfos[3].offset = 0;
+        ssboInfos[3].range = sizeof(Triangle) * scene.triangleVec.size();
 
         array<VkWriteDescriptorSet, 1+numSSBO> descriptorWrites{};
 
