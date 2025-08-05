@@ -91,6 +91,9 @@ const bool planeMode = false;
 // Initial value for the toggle that indicates if the frame accumulation must be on
 const bool frameAccumulationInitial = true;
 
+// Static render mode, if true only renders the first frame of the scene 
+const bool staticRenderMode = true;
+
 
 // -----------------------------------------------------------------------------
 //  The application class
@@ -103,7 +106,11 @@ public:
     {
         initWindow();
         initVulkan();
-        mainLoop();
+        if(staticRenderMode){
+            mainLoopStatic();
+        }else{
+            mainLoop();
+        }
         cleanup();
     }
 
@@ -262,7 +269,7 @@ private:
     bool frameAccumulationOn = frameAccumulationInitial;
 
     
-    // ---------------- Main loop ------------------------------------
+    // ---------------- Main loops ------------------------------------
     void mainLoop()
     {
         float deltaTime;
@@ -277,6 +284,16 @@ private:
             drawFrame();
             showFPS();
         }
+
+        vkDeviceWaitIdle(device);
+    }
+
+    void mainLoopStatic()
+    {
+        drawFrame();
+
+        while (!glfwWindowShouldClose(window))
+            glfwPollEvents();
 
         vkDeviceWaitIdle(device);
     }
@@ -359,14 +376,16 @@ private:
     void initWindow()
     {
         glfwInit();
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // We’ll use Vulkan, not OpenGL
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-        glfwSetWindowUserPointer(window, this);
-        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        glfwSetCursorPosCallback(window, mouse_callback_static);
-        glfwSetMouseButtonCallback(window, focus_callback_static);
-        glfwSetScrollCallback(window, mouse_scroll_callback_static);
+        if(!staticRenderMode){
+            glfwSetWindowUserPointer(window, this);
+            glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            glfwSetCursorPosCallback(window, mouse_callback_static);
+            glfwSetMouseButtonCallback(window, focus_callback_static);
+            glfwSetScrollCallback(window, mouse_scroll_callback_static);
+        }
     }
 
     // ---------------- GLFW input handling ------------------------------------

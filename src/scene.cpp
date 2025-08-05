@@ -373,6 +373,13 @@ Scene::Scene(){
         mat: glass
     });
 
+    addTriangle({
+        v0: glm::vec3(0.0,-1.0,-15.0),
+        v1: glm::vec3(2.5,2.0,-15.0),
+        v2: glm::vec3(-2.5,2.0,-15.0),
+        mat: blueMatte
+    });
+
 
     
 
