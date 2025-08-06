@@ -15,8 +15,13 @@ public:
     std::vector<uint32_t> indexVec;
     std::vector<MeshInfo> meshVec;
     float lights_strength_sum = 0.0;
+    int total_spheres = 0;
+    int total_triangles = 0;
+    int total_meshes = 0;
     
     Scene();
+    void createPreset1();
+
 private:
     void addSphere(Sphere s);
     int addMaterial(Material m);
@@ -25,6 +30,7 @@ private:
     void printLight(const Light& light);
     void addModel(Model model);
     glm::vec3 calculateNormal(Triangle t);
+    void printSceneInfo();
 };
 
 

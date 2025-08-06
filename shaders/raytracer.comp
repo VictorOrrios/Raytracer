@@ -113,8 +113,8 @@ struct Hit{
 };
 
 // ------------ Constant definitions --------------
-const int rays_per_pixel = 20;
-const int max_bounces = 10;
+const int rays_per_pixel = 5;
+const int max_bounces = 50;
 
 
 const float PINF = 1.0 / 0.0;
@@ -130,6 +130,9 @@ layout(push_constant) uniform PushConstants {
     float lights_strength_sum;
     vec3 world_up;
     bool reset_frame_accumulation;
+    int total_spheres;
+    int total_triangles;
+    int total_meshes;
 } pc;
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
@@ -468,7 +471,7 @@ bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
     float closest_so_far = ray_t.maxV;
 
     // For every sphere in the scene
-    for(int i = 0; i< spheres.length(); i++){
+    for(int i = 0; i< pc.total_spheres; i++){
         if(hit_sphere(spheres[i],ray_t,r,temp_rec)){
             hit_anything = true;
             if(closest_so_far > temp_rec.t){
@@ -479,7 +482,7 @@ bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
     }
 
     // For every tri in the scene
-    for(int i = 0; i< triangles.length(); i++){
+    for(int i = 0; i< pc.total_triangles; i++){
         if(hit_triangle(triangles[i],ray_t,r,temp_rec)){
             hit_anything = true;
             if(closest_so_far > temp_rec.t){
@@ -490,7 +493,7 @@ bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
     }
 
     // For every model in the scene
-    for(int i = 0; i< meshes.length(); i++){
+    for(int i = 0; i< pc.total_meshes; i++){
         if(hit_mesh(meshes[i],ray_t,r,temp_rec)){
             hit_anything = true;
             if(closest_so_far > temp_rec.t){

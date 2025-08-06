@@ -22,8 +22,18 @@ float randomFloat(float min, float max) {
     return distrib(gen);
 }
 
-
 Scene::Scene(){
+    // Buffers can't be 0 bytes so the vectors need at least one member
+    sphereVec.push_back({});
+    triangleVec.push_back({});
+    meshVec.push_back({});
+    vertexVec.push_back({});
+    indexVec.push_back({});
+
+    createPreset1();
+}
+
+void Scene::createPreset1(){
     // Add skybox to light list
 
     // Sun
@@ -225,78 +235,6 @@ Scene::Scene(){
     });
 
 
-    /*
-    addSphere({
-        pos: glm::vec3(0.0,0.0,-10.0),
-        r: 1.0,
-        mat: redMatte
-    });
-
-    addSphere({
-        pos: glm::vec3(-3.0,0.0,-10.0),
-        r: 1.0,
-        mat: gold
-    });
-
-    addSphere({
-        pos: glm::vec3(3.0,0.0,-10.0),
-        r: 1.0,
-        mat: cloudyGlass
-    });
-
-    */
-
-
-    /*
-
-    addSphere({
-        pos: glm::vec3(0.0,0.0,-10.0),
-        r: 1.0,
-        mat: gold
-    });
-
-    addSphere({
-        pos: glm::vec3(2.1,0.0,-10.0),
-        r: 1.0,
-        mat: red_plastic
-    });
-
-    addSphere({
-        pos: glm::vec3(4.2,0.0,-10.0),
-        r: 1.0,
-        mat: frosted_glass
-    });
-
-    addSphere({
-        pos: glm::vec3(6.3,0.0,-10.0),
-        r: 1.0,
-        mat: neon_light
-    });
-
-    addSphere({
-        pos: glm::vec3(-2.1,0.0,-10.0),
-        r: 1.0,
-        mat: human_skin
-    });
-
-    addSphere({
-        pos: glm::vec3(-4.2,0.0,-10.0),
-        r: 1.0,
-        mat: water
-    });
-
-    addSphere({
-        pos: glm::vec3(-6.3,0.0,-10.0),
-        r: 1.0,
-        mat: asphalt
-    });
-
-    */
-    
-    
-
-    
-
     addSphere({
         pos: glm::vec3(0.0,0.0,-10.0),
         r: 1.0,
@@ -393,22 +331,11 @@ Scene::Scene(){
         material: blueMatte
     };
 
-    addModel(teapot);
+    //addModel(teapot);
 
 
 
-    std::cout<<"Scene loaded"<<std::endl;
-    std::cout<<"Number of spheres: "<<sphereVec.size()<<std::endl;
-    std::cout<<"Number of materials: "<<materialVec.size()<<std::endl;
-    std::cout<<"Number of lights: "<<lightsVec.size()<<std::endl;
-    for(auto i: lightsVec){
-        printLight(i);
-    }
-    std::cout<<"Number of triangles: "<<triangleVec.size()<<std::endl;
-    std::cout<<"Number of models: "<<meshVec.size()<<std::endl;
-    std::cout<<"Number of vertices: "<<vertexVec.size()<<std::endl;
-    std::cout<<"Number of indices: "<<indexVec.size()<<std::endl;
-    
+    printSceneInfo();
 }
 
 void Scene::printLight(const Light& light) {
@@ -440,7 +367,9 @@ void Scene::addSphere(Sphere s){
         });
     }
 
+    if(total_spheres == 0) sphereVec.pop_back();
     sphereVec.push_back(s);
+    total_spheres = sphereVec.size();
 }
 
 glm::vec4 clampXYZ(glm::vec4 v, float min, float max){
@@ -479,7 +408,10 @@ void Scene::addTriangle(Triangle t){
     glm::vec3 edge1 = t.v1 - t.v0;
     glm::vec3 edge2 = t.v2 - t.v0;
     t.normal = glm::normalize(glm::cross(edge1,edge2));
+
+    if(total_triangles == 0) triangleVec.pop_back();
     triangleVec.push_back(t);
+    total_triangles = triangleVec.size();
 }
 
 void Scene::addModel(Model model){
@@ -514,8 +446,29 @@ void Scene::addModel(Model model){
         index_end: static_cast<uint>(indexVec.size() + indexVecModel.size()),
         material: model.material
     };
+
+    if(total_meshes == 0){
+        meshVec.pop_back();
+        vertexVec.pop_back();
+        indexVec.pop_back();
+    }
     meshVec.push_back(mi);
+    total_meshes = meshVec.size();
 
     vertexVec.insert(vertexVec.end(), vertexVecModel.begin(), vertexVecModel.end());
     indexVec.insert(indexVec.end(), indexVecModel.begin(), indexVecModel.end());
+}
+
+void Scene::printSceneInfo(){
+    std::cout<<"Scene loaded"<<std::endl;
+    std::cout<<"Number of spheres: "<<sphereVec.size()<<std::endl;
+    std::cout<<"Number of materials: "<<materialVec.size()<<std::endl;
+    std::cout<<"Number of lights: "<<lightsVec.size()<<std::endl;
+    for(auto i: lightsVec){
+        printLight(i);
+    }
+    std::cout<<"Number of triangles: "<<triangleVec.size()<<std::endl;
+    std::cout<<"Number of models: "<<meshVec.size()<<std::endl;
+    std::cout<<"Number of vertices: "<<vertexVec.size()<<std::endl;
+    std::cout<<"Number of indices: "<<indexVec.size()<<std::endl;
 }

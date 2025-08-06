@@ -77,8 +77,8 @@ const float nearClip = 0.1f;
 const float farClip = 100.0f; 
 
 // Initial parameters for the camera
-const glm::vec3 cameraPositionInitial = glm::vec3(9.91145,3.15162,0.0871263);
-const glm::vec3 cameraFrontInitial = glm::vec3(-0.701783,-0.168489,0.692179);
+const glm::vec3 cameraPositionInitial = glm::vec3(0.0,0.0,-3.0);
+const glm::vec3 cameraFrontInitial = glm::vec3(0.0,0.0,-4.0);
 const glm::vec3 cameraUpInitial = glm::vec3(worldUp);
 const glm::vec3 frontVectorTemp = glm::normalize(cameraFrontInitial-cameraPositionInitial);
 const float yawInitial = glm::degrees(glm::atan(frontVectorTemp.x,-frontVectorTemp.z));
@@ -93,7 +93,7 @@ const bool planeMode = false;
 const bool frameAccumulationInitial = true;
 
 // Static render mode, if true only renders the first frame of the scene 
-const bool staticRenderMode = true;
+const bool staticRenderMode = false;
 
 
 // -----------------------------------------------------------------------------
@@ -163,6 +163,9 @@ private:
         float lights_strength_sum;
         glm::vec3 world_up;
         bool reset_frame_accumulation;
+        int total_spheres;
+        int total_triangles;
+        int total_meshes;
     };
 
     // -------------------------------------------------------------------------
@@ -1429,6 +1432,9 @@ private:
         }else{
             pushConstants.reset_frame_accumulation = true;
         }
+        pushConstants.total_spheres = scene.total_spheres;
+        pushConstants.total_triangles = scene.total_triangles;
+        pushConstants.total_meshes = scene.total_meshes;
     }
 
     void updatePushConstantsPost(){
