@@ -94,6 +94,16 @@ struct Triangle{
     int mat;
 };
 
+struct MeshInfo{
+    int index_start;
+    int index_end;
+    int material;
+};
+
+struct Vertex{
+    vec3 pos;
+};
+
 struct Hit{
     vec3 p; // Where it happend
     vec3 normal; // The normal where it hit
@@ -103,8 +113,8 @@ struct Hit{
 };
 
 // ------------ Constant definitions --------------
-const int rays_per_pixel = 5;
-const int max_bounces = 50;
+const int rays_per_pixel = 20;
+const int max_bounces = 10;
 
 
 const float PINF = 1.0 / 0.0;
@@ -142,6 +152,18 @@ layout(set = 1, std430, binding = 3) buffer LightsSSBOOut {
 
 layout(set = 1, std430, binding = 4) buffer TrianglesSSBOOut {
     Triangle triangles[];
+};
+
+layout(set = 1, std430, binding = 5) buffer VertexSSBOOut {
+    Vertex vertices[];
+};
+
+layout(set = 1, std430, binding = 6) buffer IndicesSSBOOut {
+    uint indices[];
+};
+
+layout(set = 1, std430, binding = 7) buffer ModelsSSBOOut {
+    MeshInfo meshes[];
 };
 
 layout(set = 2, std430, binding = 0) buffer ColorAccumulationSSBOInOut {
@@ -344,7 +366,6 @@ bool hit_triangle(const Triangle t, const Interval ray_t, const Ray r, out Hit r
     vec3 h = cross(r.dir, edge2);
     float a = dot(edge1, h);
 
-    // Ray pararllel to tri
     if (abs(a) < EPSILON) {
         return false;
     }
@@ -364,7 +385,6 @@ bool hit_triangle(const Triangle t, const Interval ray_t, const Ray r, out Hit r
         return false;
     }
 
-    // Calcula t
     float t_r = f * dot(edge2, q);
 
     if (!surrounds(ray_t, t_r)) {
@@ -379,6 +399,64 @@ bool hit_triangle(const Triangle t, const Interval ray_t, const Ray r, out Hit r
     set_face_normal(rec, r, outward_normal);
 
     return true;
+}
+
+bool hit_mesh(const MeshInfo mesh_info, const Interval ray_t, const Ray r, out Hit rec){
+    bool hit_anything = false;
+    float closest_so_far = ray_t.maxV;
+    
+    for(int i = mesh_info.index_start; i < mesh_info.index_end; i+=3){
+        Vertex v0 = vertices[indices[i]];
+        Vertex v1 = vertices[indices[i+1]];
+        Vertex v2 = vertices[indices[i+2]];
+        const float EPSILON = 1e-6;
+        vec3 edge1 = v1.pos - v0.pos;
+        vec3 edge2 = v2.pos - v0.pos;
+        vec3 h = cross(r.dir, edge2);
+        float a = dot(edge1, h);
+
+        if (abs(a) < EPSILON) {
+            continue;
+        }
+
+        float f = 1.0 / a;
+        vec3 s = r.orig - v0.pos;
+        float u = f * dot(s, h);
+
+        if (u < 0.0 || u > 1.0) {
+            continue;
+        }
+
+        vec3 q = cross(s, edge1);
+        float v = f * dot(r.dir, q);
+
+        if (v < 0.0 || u + v > 1.0) {
+            continue;
+        }
+
+        float t_r = f * dot(edge2, q);
+
+        if (!surrounds(ray_t, t_r)) {
+            continue;
+        }
+
+        if(t_r>closest_so_far){
+            continue;
+        }
+
+        closest_so_far = t_r;
+        hit_anything = true;
+        
+        rec.t = t_r;
+        rec.p = at(r, t_r);
+
+        vec3 outward_normal = normalize(cross(edge1,edge2));
+        set_face_normal(rec, r, outward_normal);
+    }
+
+    rec.mat = mesh_info.material;
+
+    return hit_anything;
 }
 
 // ------------ Scene functions --------------
@@ -403,6 +481,17 @@ bool hit_scene(const Ray r, const Interval ray_t, inout Hit rec){
     // For every tri in the scene
     for(int i = 0; i< triangles.length(); i++){
         if(hit_triangle(triangles[i],ray_t,r,temp_rec)){
+            hit_anything = true;
+            if(closest_so_far > temp_rec.t){
+                closest_so_far = temp_rec.t;
+                rec = temp_rec;
+            }
+        }
+    }
+
+    // For every model in the scene
+    for(int i = 0; i< meshes.length(); i++){
+        if(hit_mesh(meshes[i],ray_t,r,temp_rec)){
             hit_anything = true;
             if(closest_so_far > temp_rec.t){
                 closest_so_far = temp_rec.t;

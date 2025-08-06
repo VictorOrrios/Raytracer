@@ -53,7 +53,7 @@ debug: CXXFLAGS += $(DEBUGFLAGS)
 debug: release
 
 # Release build
-release: clean all
+release: all
 	./$(TARGET)
 
 # Get rid of the junk!

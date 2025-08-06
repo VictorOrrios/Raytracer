@@ -21,7 +21,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/euler_angles.hpp>
 #include <chrono>
-
+#include <thread>
+#include <atomic>
 
 #include "scene.hpp"
 
@@ -57,7 +58,7 @@ const vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 // Number of shader storage buffers used
-const int numSSBO = 4;
+const int numSSBO = 7;
 
 // World vetors
 const glm::vec4 worldFront = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
@@ -76,8 +77,8 @@ const float nearClip = 0.1f;
 const float farClip = 100.0f; 
 
 // Initial parameters for the camera
-const glm::vec3 cameraPositionInitial = glm::vec3(0.0f, 0.0f, -3.0f);
-const glm::vec3 cameraFrontInitial = glm::vec3(0.0f, 0.0f, -4.0f);
+const glm::vec3 cameraPositionInitial = glm::vec3(9.91145,3.15162,0.0871263);
+const glm::vec3 cameraFrontInitial = glm::vec3(-0.701783,-0.168489,0.692179);
 const glm::vec3 cameraUpInitial = glm::vec3(worldUp);
 const glm::vec3 frontVectorTemp = glm::normalize(cameraFrontInitial-cameraPositionInitial);
 const float yawInitial = glm::degrees(glm::atan(frontVectorTemp.x,-frontVectorTemp.z));
@@ -268,6 +269,7 @@ private:
     bool resetFrameAccumulation = true;
     bool frameAccumulationOn = frameAccumulationInitial;
 
+
     
     // ---------------- Main loops ------------------------------------
     void mainLoop()
@@ -292,11 +294,15 @@ private:
     {
         drawFrame();
 
-        while (!glfwWindowShouldClose(window))
+        while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
-
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        
         vkDeviceWaitIdle(device);
+
     }
+
 
     // ---------------- Cleanup ------------------------------------
     void cleanupSwapChain()
@@ -435,6 +441,11 @@ private:
 
         if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS)
             glfwSetWindowShouldClose(window,true);
+
+        if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS){
+            cout<<"Camera position: ("<<cameraPos.x<<","<<cameraPos.y<<","<<cameraPos.z<<")"<<endl;
+            cout<<"Camera front: ("<<cameraFront.x<<","<<cameraFront.y<<","<<cameraFront.z<<")"<<endl;
+        }
         
         if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS){
             roll -= rollSpeedDelta;
@@ -1377,7 +1388,6 @@ private:
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    
 
     // ---------------- Frame buffers recreation ------------------------------------
     void recreateSwapChain(int width, int height){
@@ -1541,6 +1551,9 @@ private:
         createSSBOVector(1,scene.materialVec);
         createSSBOVector(2,scene.lightsVec);
         createSSBOVector(3,scene.triangleVec);
+        createSSBOVector(4,scene.vertexVec);
+        createSSBOVector(5,scene.indexVec);
+        createSSBOVector(6,scene.meshVec);
     }
 
     template <typename T>
@@ -1760,25 +1773,32 @@ private:
 
         vector<VkDescriptorBufferInfo> ssboInfos = vector<VkDescriptorBufferInfo>(numSSBO);
 
+        for(int i = 0; i<numSSBO; i++){
+            ssboInfos[i].buffer = shaderStorageBuffers[i];
+            ssboInfos[i].offset = 0;
+        }
+
         // Spheres SSBO
-        ssboInfos[0].buffer = shaderStorageBuffers[0];
-        ssboInfos[0].offset = 0;
         ssboInfos[0].range = sizeof(Sphere) * scene.sphereVec.size();
 
         // Materials SSBO
-        ssboInfos[1].buffer = shaderStorageBuffers[1];
-        ssboInfos[1].offset = 0;
         ssboInfos[1].range = sizeof(Material) * scene.materialVec.size();
 
         // Lights SSBO
-        ssboInfos[2].buffer = shaderStorageBuffers[2];
-        ssboInfos[2].offset = 0;
         ssboInfos[2].range = sizeof(Light) * scene.lightsVec.size();
 
         // Triangles SSBO
-        ssboInfos[3].buffer = shaderStorageBuffers[3];
-        ssboInfos[3].offset = 0;
         ssboInfos[3].range = sizeof(Triangle) * scene.triangleVec.size();
+
+        // Vertex SSBO
+        ssboInfos[4].range = sizeof(Vertex) * scene.vertexVec.size();
+
+        // Index SSBO
+        ssboInfos[5].range = sizeof(uint32_t) * scene.indexVec.size();
+
+        // Mesh info SSBO
+        ssboInfos[6].range = sizeof(MeshInfo) * scene.meshVec.size();
+        
 
         array<VkWriteDescriptorSet, 1+numSSBO> descriptorWrites{};
 

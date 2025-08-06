@@ -1,7 +1,10 @@
 #include "scene.hpp"
 #include <random>
-#include <iostream>
 #include <algorithm>
+#include "tinygltf/loader.hpp"
+#include <glm/gtx/euler_angles.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 
 int randomInt(int min, int max) {
     static std::random_device rd;  
@@ -380,8 +383,19 @@ Scene::Scene(){
         mat: blueMatte
     });
 
+    Model teapot = {
+        file_name: "teapot.glb",
+        pos: glm::vec3(0.0,-1.0,10.0),
+        pitch: 90.0,
+        yaw: 0.0,
+        roll: 0.0,
+        scale: 1.0,
+        material: blueMatte
+    };
 
-    
+    addModel(teapot);
+
+
 
     std::cout<<"Scene loaded"<<std::endl;
     std::cout<<"Number of spheres: "<<sphereVec.size()<<std::endl;
@@ -390,6 +404,11 @@ Scene::Scene(){
     for(auto i: lightsVec){
         printLight(i);
     }
+    std::cout<<"Number of triangles: "<<triangleVec.size()<<std::endl;
+    std::cout<<"Number of models: "<<meshVec.size()<<std::endl;
+    std::cout<<"Number of vertices: "<<vertexVec.size()<<std::endl;
+    std::cout<<"Number of indices: "<<indexVec.size()<<std::endl;
+    
 }
 
 void Scene::printLight(const Light& light) {
@@ -461,4 +480,42 @@ void Scene::addTriangle(Triangle t){
     glm::vec3 edge2 = t.v2 - t.v0;
     t.normal = glm::normalize(glm::cross(edge1,edge2));
     triangleVec.push_back(t);
+}
+
+void Scene::addModel(Model model){
+
+    std::vector<Vertex> vertexVecModel;
+    std::vector<uint32_t> indexVecModel;
+
+    if(!LoadModel(ASSETS_DIRECTORY+model.file_name, vertexVecModel, indexVecModel)){
+        std::cerr<<"Error loading model "<<ASSETS_DIRECTORY+model.file_name<<std::endl;
+    }else{
+        std::cout << "Model "<<ASSETS_DIRECTORY+model.file_name<<" loaded successfully!" << std::endl;
+        std::cout << "Vertex count: " << vertexVecModel.size() << std::endl;
+        std::cout << "Index count: " << indexVecModel.size() << std::endl;
+    }
+
+    float pitchRad = glm::radians(model.pitch);
+    float yawRad   = glm::radians(model.yaw);
+    float rollRad  = glm::radians(model.roll);
+    glm::mat4 rotationMatrix = glm::yawPitchRoll(yawRad, pitchRad, rollRad);
+
+    glm::mat4 transformationMatrix = glm::translate(glm::mat4(1.0f), model.pos) *
+                                        rotationMatrix *
+                                        glm::scale(glm::mat4(1.0f), glm::vec3(model.scale));
+
+    for(int i = 0; i<vertexVecModel.size(); i++){
+        glm::vec4 transformed = transformationMatrix * glm::vec4(vertexVecModel[i].pos, 1.0f);
+        vertexVecModel[i].pos = glm::vec3(transformed);
+    }
+
+    MeshInfo mi = {
+        index_start: static_cast<uint>(indexVec.size()),
+        index_end: static_cast<uint>(indexVec.size() + indexVecModel.size()),
+        material: model.material
+    };
+    meshVec.push_back(mi);
+
+    vertexVec.insert(vertexVec.end(), vertexVecModel.begin(), vertexVecModel.end());
+    indexVec.insert(indexVec.end(), indexVecModel.begin(), indexVecModel.end());
 }
