@@ -29,6 +29,14 @@ struct alignas(16) Triangle{
     int mat;
 };
 
+struct Quad{
+    glm::vec3 v0;
+    glm::vec3 v1;
+    glm::vec3 v2;
+    glm::vec3 v3;
+    int mat;
+};
+
 struct Vertex{
     alignas(16) glm::vec3 pos;
 };

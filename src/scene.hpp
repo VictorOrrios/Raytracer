@@ -28,6 +28,7 @@ private:
     int addMaterial(Material m);
     void addLight(Light l);
     void addTriangle(Triangle t);
+    void addQuad(Quad q);
     void printLight(const Light& light);
     void addModel(Model model);
     glm::vec3 calculateNormal(Triangle t);

@@ -316,7 +316,7 @@ void Scene::createPreset1(){
 
     
 
-    addTriangle({
+    addQuad({
         v0: glm::vec3(0.0,-1.0,-5.0),
         v1: glm::vec3(2.5,2.0,-5.0),
         v2: glm::vec3(-2.5,2.0,-5.0),
@@ -340,7 +340,7 @@ void Scene::createPreset1(){
         material: blueMatte
     };
 
-    addModel(teapot);
+    //addModel(teapot);
 
 
 
@@ -433,6 +433,25 @@ void Scene::addTriangle(Triangle t){
         });
     }
 }
+
+void Scene::addQuad(Quad q){
+    q.v3 = q.v1 + q.v2 - q.v0;
+
+    addTriangle({
+        v0:q.v0,
+        v1:q.v1,
+        v2:q.v2,
+        mat:q.mat
+    });
+
+    addTriangle({
+        v0:q.v1,
+        v1:q.v3,
+        v2:q.v2,
+        mat:q.mat
+    });
+}
+
 
 void Scene::addModel(Model model){
 
