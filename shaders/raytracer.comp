@@ -114,8 +114,8 @@ struct Hit{
 };
 
 // ------------ Constant definitions --------------
-const int rays_per_pixel = 1;
-const int max_bounces = 1;
+const int rays_per_pixel = 5;
+const int max_bounces = 20;
 
 
 const float PINF = 1.0 / 0.0;
@@ -566,9 +566,14 @@ vec4 skybox_color_black(Ray r){
     return vec4(0.0);
 }
 
+// Skybox variation for just a grey sky
+vec4 skybox_color_grey(Ray r){
+    return vec4(0.3);
+}
+
 // Color of the skybox where the ray is pointing to
 vec4 skybox_color(Ray r) {
-    return skybox_color_day(r);
+    return skybox_color_grey(r);
 }
 
 

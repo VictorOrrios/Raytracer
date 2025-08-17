@@ -22,6 +22,7 @@ public:
     
     Scene();
     void createPreset1();
+    void createCornellBox();
 
 private:
     void addSphere(Sphere s);

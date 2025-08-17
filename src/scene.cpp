@@ -31,7 +31,7 @@ Scene::Scene(){
     vertexVec.push_back({});
     indexVec.push_back(0);
 
-    createPreset1();
+    createCornellBox();
 }
 
 void Scene::createPreset1(){
@@ -316,7 +316,7 @@ void Scene::createPreset1(){
 
     
 
-    addQuad({
+    addTriangle({
         v0: glm::vec3(0.0,-1.0,-5.0),
         v1: glm::vec3(2.5,2.0,-5.0),
         v2: glm::vec3(-2.5,2.0,-5.0),
@@ -342,6 +342,353 @@ void Scene::createPreset1(){
 
     //addModel(teapot);
 
+
+
+    printSceneInfo();
+}
+
+void Scene::createCornellBox(){
+
+
+    int white = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 1.0,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
+    int red = addMaterial({
+        albedo: glm::vec4(0.75, 0.15, 0.15, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 1.0,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
+    int green = addMaterial({
+        albedo: glm::vec4(0.15, 0.75, 0.15, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 1.0,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
+    int white_ligth = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(1.0, 1.0,1.0,20.0),
+        roughness: 0.0,
+        metallic: 1.0,
+        ior: 1.33,
+        trs_weight: 0.0,
+    });
+
+    int blue_ligth = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.101, 0.643, 0.835,2.0),
+        roughness: 0.0,
+        metallic: 1.0,
+        ior: 1.33,
+        trs_weight: 0.0,
+    });
+
+    int glass = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 1.0,
+    });
+
+    int frosted_blue_glass = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(0.3,0.3,1.0,1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.3,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 1.0,
+    });
+
+    int frosted_glass = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0,1.0,1.0,1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.0),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 1.0,
+    });
+
+    int gold = addMaterial({
+        albedo: glm::vec4(1.000,0.720,0.315, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.000,0.973,0.597,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 0.0,
+        ior: 0.47,
+        trs_weight: 0.0,
+    });
+
+    int yellowMetal = addMaterial({
+        albedo: glm::vec4(0.945, 0.949, 0.212, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.1,
+        metallic: 1.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
+    int mirror = addMaterial({
+        albedo: glm::vec4(1.0),
+        subsurface: glm::vec4(1.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.5),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.0,
+        metallic: 1.0,
+        ior: 1.33,
+        trs_weight: 0.0,
+    });
+
+    int blueMatte = addMaterial({
+        albedo: glm::vec4(0.208, 0.612, 0.8, 1.0),
+        subsurface: glm::vec4(0.0),
+        specular_tint: glm::vec4(1.0,1.0,1.0,0.8),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.2,
+        metallic: 0.0,
+        ior: 1.5,
+        trs_weight: 0.0,
+    });
+
+    int weird = addMaterial({
+        albedo: glm::vec4(0.267, 0.588, 0.475, 0.8),
+        subsurface: glm::vec4(1.0,0.3,0.3,1.0),
+        specular_tint: glm::vec4(0.0,1.0,1.0,1.0),
+        emission_color: glm::vec4(0.0),
+        roughness: 0.2,
+        metallic: 0.5,
+        ior: 0.8,
+        trs_weight: 0.8,
+    });
+
+    // Wall mirror
+    addQuad({
+        v0: glm::vec3(0.000,0.0,4.592),
+        v1: glm::vec3(2.000,0.0,5.592),
+        v2: glm::vec3(2.000,5.49,5.592),
+        v3: glm::vec3(0.000,5.49,4.592),
+        mat: mirror
+    });
+
+    // Wall translucent
+    addQuad({
+        v0: glm::vec3(0.000,4.0,4.0),
+        v1: glm::vec3(0.9,4.0,4.0),
+        v2: glm::vec3(0.9,5.0,4.0),
+        v3: glm::vec3(0.000,5.0,4.0),
+        mat: frosted_glass
+    });
+
+    // Floor
+    addQuad({
+        v0: glm::vec3(5.528,-0.001,0.000),
+        v1: glm::vec3(0.000,-0.001,0.000),
+        v2: glm::vec3(0.000,-0.001,5.592),
+        v3: glm::vec3(5.496,-0.001,5.592),
+        mat: white
+    });
+
+    // Ceiling
+    addQuad({
+        v0: glm::vec3(5.560,5.488,0.000),
+        v1: glm::vec3(5.560,5.488,5.592),
+        v2: glm::vec3(0.000,5.488,5.592),
+        v3: glm::vec3(0.000,5.488,0.000),
+        mat: white
+    });
+
+    // Back wall
+    addQuad({
+        v0: glm::vec3(5.496,0.000,5.592),
+        v1: glm::vec3(0.000,0.000,5.592),
+        v2: glm::vec3(0.000,5.488,5.592),
+        v3: glm::vec3(5.560,5.488,5.592),
+        mat: white
+    });
+
+    // Right wall
+    addQuad({
+        v0: glm::vec3(0.000,0.000,5.592),
+        v1: glm::vec3(0.000,0.000,0.000),
+        v2: glm::vec3(0.000,5.488,0.000),
+        v3: glm::vec3(0.000,5.488,5.592),
+        mat: green
+    });
+
+    // Left wall
+    addQuad({
+        v0: glm::vec3(5.528,0.000,0.000),
+        v1: glm::vec3(5.496,0.000,5.592),
+        v2: glm::vec3(5.560,5.488,5.592),
+        v3: glm::vec3(5.560,5.488,0.000),
+        mat: red
+    });
+    
+    // Light
+    addQuad({
+        v0: glm::vec3(3.430,5.47,2.270),
+        v1: glm::vec3(3.430,5.47,3.320),
+        v2: glm::vec3(2.130,5.47,3.320),
+        v3: glm::vec3(2.130,5.47,2.270),
+        mat: white_ligth
+    });
+
+    // Ground sphere 1 
+    addSphere({
+        pos: glm::vec3(5.0,0.6, 1.0),
+        r: 0.6,
+        mat: mirror
+    });
+
+    // Ground sphere 2 
+    addSphere({
+        pos: glm::vec3(3.0,0.6, 2.5),
+        r: 0.6,
+        mat: weird
+    });
+
+    // Ground light
+    addSphere({
+        pos: glm::vec3(0.8,0.15, 1.3),
+        r: 0.15,
+        mat: blue_ligth
+    });
+
+    // On top sphere
+    addSphere({
+        pos: glm::vec3(1.85,2.150, 1.5),
+        r: 0.5,
+        mat: frosted_blue_glass
+    });
+
+
+    // Short block
+    int short_block_mat = blueMatte;
+    addQuad({
+        v0: glm::vec3(1.300,1.650,0.650),
+        v1: glm::vec3(0.820,1.650,2.250),
+        v2: glm::vec3(2.400,1.650,2.720),
+        v3: glm::vec3(2.900,1.650,1.140),
+        mat: short_block_mat
+    });
+
+    addQuad({
+        v0: glm::vec3(2.900,0.000,1.140),
+        v1: glm::vec3(2.900,1.650,1.140),
+        v2: glm::vec3(2.400,1.650,2.720),
+        v3: glm::vec3(2.400,0.000,2.720),
+        mat: short_block_mat
+    });
+
+    addQuad({
+        v0: glm::vec3(1.300,0.000,0.650),
+        v1: glm::vec3(1.300,1.650,0.650),
+        v2: glm::vec3(2.900,1.650,1.140),
+        v3: glm::vec3(2.900,0.000,1.140),
+        mat: short_block_mat
+    });
+
+    addQuad({
+        v0: glm::vec3(0.820,0.000,2.250),
+        v1: glm::vec3(0.820,1.650,2.250),
+        v2: glm::vec3(1.300,1.650,0.650),
+        v3: glm::vec3(1.300,0.000,0.650),
+        mat: short_block_mat
+    });
+
+    addQuad({
+        v0: glm::vec3(2.400,0.000,2.720),
+        v1: glm::vec3(2.400,1.650,2.720),
+        v2: glm::vec3(0.820,1.650,2.250),
+        v3: glm::vec3(0.820,0.000,2.250),
+        mat: short_block_mat
+    });
+
+    // Tall block
+    int tall_block_mat = glass;
+    addQuad({
+        v0: glm::vec3(4.230,3.300,2.470),
+        v1: glm::vec3(2.650,3.300,2.960),
+        v2: glm::vec3(3.140,3.300,4.560),
+        v3: glm::vec3(4.720,3.300,4.060),
+        mat: tall_block_mat
+    });
+
+    addQuad({
+        v0: glm::vec3(4.230,0.000,2.470),
+        v1: glm::vec3(4.230,3.300,2.470),
+        v2: glm::vec3(4.720,3.300,4.060),
+        v3: glm::vec3(4.720,0.000,4.060),
+        mat: tall_block_mat
+    });
+
+    addQuad({
+        v0: glm::vec3(4.720,0.000,4.060),
+        v1: glm::vec3(4.720,3.300,4.060),
+        v2: glm::vec3(3.140,3.300,4.560),
+        v3: glm::vec3(3.140,0.000,4.560),
+        mat: tall_block_mat
+    });
+
+    addQuad({
+        v0: glm::vec3(3.140,0.000,4.560),
+        v1: glm::vec3(3.140,3.300,4.560),
+        v2: glm::vec3(2.650,3.300,2.960),
+        v3: glm::vec3(2.650,0.000,2.960),
+        mat: tall_block_mat
+    });
+
+    addQuad({
+        v0: glm::vec3(2.650,0.000,2.960),
+        v1: glm::vec3(2.650,3.300,2.960),
+        v2: glm::vec3(4.230,3.300,2.470),
+        v3: glm::vec3(4.230,0.000,2.470),
+        mat: tall_block_mat
+    });
+
+    Model star = {
+        file_name: "star.glb",
+        pos: glm::vec3(3.5,4.0,3.1),
+        pitch: 00.0,
+        yaw: 18.0,
+        roll: 180.0,
+        scale: 0.1,
+        material: gold
+    };
+
+    addModel(star);
 
 
     printSceneInfo();
@@ -435,8 +782,6 @@ void Scene::addTriangle(Triangle t){
 }
 
 void Scene::addQuad(Quad q){
-    q.v3 = q.v1 + q.v2 - q.v0;
-
     addTriangle({
         v0:q.v0,
         v1:q.v1,
@@ -445,9 +790,9 @@ void Scene::addQuad(Quad q){
     });
 
     addTriangle({
-        v0:q.v1,
+        v0:q.v2,
         v1:q.v3,
-        v2:q.v2,
+        v2:q.v0,
         mat:q.mat
     });
 }

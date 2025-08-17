@@ -77,8 +77,8 @@ const float nearClip = 0.1f;
 const float farClip = 100.0f; 
 
 // Initial parameters for the camera
-const glm::vec3 cameraPositionInitial = glm::vec3(0.0,0.0,-3.0);
-const glm::vec3 cameraFrontInitial = glm::vec3(0.0,0.0,-4.0);
+const glm::vec3 cameraPositionInitial = glm::vec3(2.75,2.75,-6.0);
+const glm::vec3 cameraFrontInitial = glm::vec3(2.75,2.75,-5.0);
 const glm::vec3 cameraUpInitial = glm::vec3(worldUp);
 const glm::vec3 frontVectorTemp = glm::normalize(cameraFrontInitial-cameraPositionInitial);
 const float yawInitial = glm::degrees(glm::atan(frontVectorTemp.x,-frontVectorTemp.z));
