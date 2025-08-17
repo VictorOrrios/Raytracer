@@ -19,6 +19,7 @@
 #define DIRECTIONAL     3
 #define CONE            4
 #define AREA            5
+#define TRIANGLE        6
 
 
 
@@ -113,8 +114,8 @@ struct Hit{
 };
 
 // ------------ Constant definitions --------------
-const int rays_per_pixel = 5;
-const int max_bounces = 50;
+const int rays_per_pixel = 1;
+const int max_bounces = 1;
 
 
 const float PINF = 1.0 / 0.0;
@@ -642,6 +643,27 @@ vec3 sample_light(vec3 point, vec3 normal, out vec3 L, out float pdf){
             break;
         case AREA:
 
+            break;
+        case TRIANGLE:
+            int tri_index = int(picked_light.pos_angle_aux.x);
+            Triangle t = triangles[tri_index];
+            float e1 = sqrt(random()), e2 = random();
+            vec3 tri_point = (1 - e1) * t.v0 + e1 * (1 - e2) * t.v1 + e1 * e2 * t.v2;
+            point_to_spoint = tri_point-point;
+            d_to_spoint = length(point_to_spoint);
+            L = normalize(point_to_spoint);
+            s_ray = Ray(point,L);
+            i = Interval(0.005, PINF);
+            if(hit_scene(s_ray,i,h)){
+                if(abs(d_to_spoint - h.t) < 0.1){
+                    float d2 = d_to_spoint*d_to_spoint;
+                    pdf = 1 ;
+                    return clamp(picked_light.color_str.rgb * picked_light.color_str.a / d2,0.0,1.0);
+                }
+            }
+            L = normal;
+            pdf = 0.00001;
+            return vec3(0.0);
             break;
         default:
 

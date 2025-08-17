@@ -1424,7 +1424,7 @@ private:
     void updatePushConstantsPre(){
         pushConstants.time = lastFrame;
         pushConstants.frameCount = frameCount;
-        pushConstants.total_lights = scene.lightsVec.size();
+        pushConstants.total_lights = scene.total_lights;
         pushConstants.lights_strength_sum = scene.lights_strength_sum;
         pushConstants.world_up = worldUp;
         if(frameAccumulationOn){

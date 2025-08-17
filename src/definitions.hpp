@@ -11,6 +11,7 @@ enum LightTypes{
     DIRECTIONAL = 3,
     CONE = 4,
     AREA = 5,
+    TRIANGLE = 6,
 };
 
 

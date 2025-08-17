@@ -15,6 +15,7 @@ public:
     std::vector<uint32_t> indexVec;
     std::vector<MeshInfo> meshVec;
     float lights_strength_sum = 0.0;
+    int total_lights = 0;
     int total_spheres = 0;
     int total_triangles = 0;
     int total_meshes = 0;

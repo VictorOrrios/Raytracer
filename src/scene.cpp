@@ -24,11 +24,12 @@ float randomFloat(float min, float max) {
 
 Scene::Scene(){
     // Buffers can't be 0 bytes so the vectors need at least one member
+    lightsVec.push_back({});
     sphereVec.push_back({});
     triangleVec.push_back({});
     meshVec.push_back({});
     vertexVec.push_back({});
-    indexVec.push_back({});
+    indexVec.push_back(0);
 
     createPreset1();
 }
@@ -37,18 +38,22 @@ void Scene::createPreset1(){
     // Add skybox to light list
 
     // Sun
+    /*
     addLight({
         pos_angle_aux: glm::vec4(0.33, -0.67, 0.67,0.0),
         color_str: glm::vec4(1.0,1.0,1.0,5.0),
         type: DIRECTIONAL
     });
+    */
 
     // Daylight
+    /*
     addLight({
         pos_angle_aux: glm::vec4(0.0,0.0,0.0,0.0),
         color_str: glm::vec4(0.231, 0.756, 0.945,1.0),
         type: AMBIENT
     });
+    */
 
     // Moon
     /*
@@ -289,6 +294,8 @@ void Scene::createPreset1(){
         mat: dielectric075
     });
 
+    
+
     addSphere({
         pos: glm::vec3(-2.5,-0.7,-6.0),
         r: 0.3,
@@ -307,11 +314,13 @@ void Scene::createPreset1(){
         mat: blue_ligth
     });
 
+    
+
     addTriangle({
         v0: glm::vec3(0.0,-1.0,-5.0),
         v1: glm::vec3(2.5,2.0,-5.0),
         v2: glm::vec3(-2.5,2.0,-5.0),
-        mat: glass
+        mat: blueMatte
     });
 
     addTriangle({
@@ -331,7 +340,7 @@ void Scene::createPreset1(){
         material: blueMatte
     };
 
-    //addModel(teapot);
+    addModel(teapot);
 
 
 
@@ -399,7 +408,9 @@ void Scene::addLight(Light l){
         l.accumulated_str = lightsVec[lightsVec.size()-1].accumulated_str + l.color_str.a;
     }
 
+    if(total_lights == 0) lightsVec.pop_back();
     lightsVec.push_back(l);
+    total_lights= lightsVec.size();
 
     lights_strength_sum += l.color_str.a;
 }
@@ -412,9 +423,24 @@ void Scene::addTriangle(Triangle t){
     if(total_triangles == 0) triangleVec.pop_back();
     triangleVec.push_back(t);
     total_triangles = triangleVec.size();
+
+    // If it emmits light add it to the list
+    if(materialVec[t.mat].emission_color.a > 0.0){
+        addLight({
+            pos_angle_aux: glm::vec4(total_triangles-1,0.0,0.0,0.0),
+            color_str: materialVec[t.mat].emission_color,
+            type: TRIANGLE 
+        });
+    }
 }
 
 void Scene::addModel(Model model){
+
+    if(total_meshes == 0){
+        meshVec.pop_back();
+        vertexVec.pop_back();
+        indexVec.pop_back();
+    }
 
     std::vector<Vertex> vertexVecModel;
     std::vector<uint32_t> indexVecModel;
@@ -441,17 +467,13 @@ void Scene::addModel(Model model){
         vertexVecModel[i].pos = glm::vec3(transformed);
     }
 
+    
     MeshInfo mi = {
         index_start: static_cast<uint>(indexVec.size()),
         index_end: static_cast<uint>(indexVec.size() + indexVecModel.size()),
         material: model.material
     };
 
-    if(total_meshes == 0){
-        meshVec.pop_back();
-        vertexVec.pop_back();
-        indexVec.pop_back();
-    }
     meshVec.push_back(mi);
     total_meshes = meshVec.size();
 
